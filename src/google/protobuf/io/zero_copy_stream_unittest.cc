@@ -48,7 +48,7 @@
 
 #include "config.h"
 
-#if defined(_MSC_VER) || defined(__BORLANDC__)
+#ifdef _MSC_VER
 #include <io.h>
 #else
 #include <unistd.h>
@@ -98,10 +98,10 @@ class IoTest : public testing::Test {
   // Helper to read a fixed-length array of data from an input stream.
   int ReadFromInput(ZeroCopyInputStream* input, void* data, int size);
   // Write a string to the output stream.
-  void WriteString(ZeroCopyOutputStream* output, const std::string& str);
+  void WriteString(ZeroCopyOutputStream* output, const string& str);
   // Read a number of bytes equal to the size of the given string and checks
   // that it matches the string.
-  void ReadString(ZeroCopyInputStream* input, const std::string& str);
+  void ReadString(ZeroCopyInputStream* input, const string& str);
   // Writes some text to the output stream in a particular order.  Returns
   // the number of bytes written, incase the caller needs that to set up an
   // input stream.
@@ -117,8 +117,8 @@ class IoTest : public testing::Test {
   void ReadStuffLarge(ZeroCopyInputStream* input);
 
 #if HAVE_ZLIB
-  std::string Compress(const std::string& data, const GzipOutputStream::Options& options);
-  std::string Uncompress(const std::string& data);
+  string Compress(const string& data, const GzipOutputStream::Options& options);
+  string Uncompress(const string& data);
 #endif
 
   static const int kBlockSizes[];
@@ -191,11 +191,11 @@ int IoTest::ReadFromInput(ZeroCopyInputStream* input, void* data, int size) {
   }
 }
 
-void IoTest::WriteString(ZeroCopyOutputStream* output, const std::string& str) {
+void IoTest::WriteString(ZeroCopyOutputStream* output, const string& str) {
   EXPECT_TRUE(WriteToOutput(output, str.c_str(), str.size()));
 }
 
-void IoTest::ReadString(ZeroCopyInputStream* input, const std::string& str) {
+void IoTest::ReadString(ZeroCopyInputStream* input, const string& str) {
   scoped_array<char> buffer(new char[str.size() + 1]);
   buffer[str.size()] = '\0';
   EXPECT_EQ(ReadFromInput(input, buffer.get(), str.size()), str.size());
@@ -238,8 +238,8 @@ int IoTest::WriteStuffLarge(ZeroCopyOutputStream* output) {
   WriteString(output, "Hello world!\n");
   WriteString(output, "Some te");
   WriteString(output, "xt.  Blah blah.");
-  WriteString(output, std::string(100000, 'x'));  // A very long string
-  WriteString(output, std::string(100000, 'y'));  // A very long string
+  WriteString(output, string(100000, 'x'));  // A very long string
+  WriteString(output, string(100000, 'y'));  // A very long string
   WriteString(output, "01234567890123456789");
 
   EXPECT_EQ(output->ByteCount(), 200055);
@@ -255,7 +255,7 @@ void IoTest::ReadStuffLarge(ZeroCopyInputStream* input) {
   EXPECT_TRUE(input->Skip(5));
   ReadString(input, "blah.");
   EXPECT_TRUE(input->Skip(100000 - 10));
-  ReadString(input, std::string(10, 'x') + std::string(100000 - 20000, 'y'));
+  ReadString(input, string(10, 'x') + string(100000 - 20000, 'y'));
   EXPECT_TRUE(input->Skip(20000 - 10));
   ReadString(input, "yyyyyyyyyy01234567890123456789");
 
@@ -370,6 +370,100 @@ TEST_F(IoTest, GzipIo) {
   delete [] buffer;
 }
 
+TEST_F(IoTest, GzipIoWithFlush) {
+  const int kBufferSize = 2*1024;
+  uint8* buffer = new uint8[kBufferSize];
+  // We start with i = 4 as we want a block size > 6. With block size <= 6
+  // Flush() fills up the entire 2K buffer with flush markers and the test
+  // fails. See documentation for Flush() for more detail.
+  for (int i = 4; i < kBlockSizeCount; i++) {
+    for (int j = 0; j < kBlockSizeCount; j++) {
+      for (int z = 0; z < kBlockSizeCount; z++) {
+        int gzip_buffer_size = kBlockSizes[z];
+        int size;
+        {
+          ArrayOutputStream output(buffer, kBufferSize, kBlockSizes[i]);
+          GzipOutputStream::Options options;
+          options.format = GzipOutputStream::GZIP;
+          if (gzip_buffer_size != -1) {
+            options.buffer_size = gzip_buffer_size;
+          }
+          GzipOutputStream gzout(&output, options);
+          WriteStuff(&gzout);
+          EXPECT_TRUE(gzout.Flush());
+          gzout.Close();
+          size = output.ByteCount();
+        }
+        {
+          ArrayInputStream input(buffer, size, kBlockSizes[j]);
+          GzipInputStream gzin(
+              &input, GzipInputStream::GZIP, gzip_buffer_size);
+          ReadStuff(&gzin);
+        }
+      }
+    }
+  }
+  delete [] buffer;
+}
+
+TEST_F(IoTest, GzipIoContiguousFlushes) {
+  const int kBufferSize = 2*1024;
+  uint8* buffer = new uint8[kBufferSize];
+
+  int block_size = kBlockSizes[4];
+  int gzip_buffer_size = block_size;
+  int size;
+
+  ArrayOutputStream output(buffer, kBufferSize, block_size);
+  GzipOutputStream::Options options;
+  options.format = GzipOutputStream::GZIP;
+  if (gzip_buffer_size != -1) {
+    options.buffer_size = gzip_buffer_size;
+  }
+  GzipOutputStream gzout(&output, options);
+  WriteStuff(&gzout);
+  EXPECT_TRUE(gzout.Flush());
+  EXPECT_TRUE(gzout.Flush());
+  gzout.Close();
+  size = output.ByteCount();
+
+  ArrayInputStream input(buffer, size, block_size);
+  GzipInputStream gzin(
+      &input, GzipInputStream::GZIP, gzip_buffer_size);
+  ReadStuff(&gzin);
+
+  delete [] buffer;
+}
+
+TEST_F(IoTest, GzipIoReadAfterFlush) {
+  const int kBufferSize = 2*1024;
+  uint8* buffer = new uint8[kBufferSize];
+
+  int block_size = kBlockSizes[4];
+  int gzip_buffer_size = block_size;
+  int size;
+  ArrayOutputStream output(buffer, kBufferSize, block_size);
+  GzipOutputStream::Options options;
+  options.format = GzipOutputStream::GZIP;
+  if (gzip_buffer_size != -1) {
+    options.buffer_size = gzip_buffer_size;
+  }
+
+  GzipOutputStream gzout(&output, options);
+  WriteStuff(&gzout);
+  EXPECT_TRUE(gzout.Flush());
+  size = output.ByteCount();
+
+  ArrayInputStream input(buffer, size, block_size);
+  GzipInputStream gzin(
+      &input, GzipInputStream::GZIP, gzip_buffer_size);
+  ReadStuff(&gzin);
+
+  gzout.Close();
+
+  delete [] buffer;
+}
+
 TEST_F(IoTest, ZlibIo) {
   const int kBufferSize = 2*1024;
   uint8* buffer = new uint8[kBufferSize];
@@ -437,9 +531,9 @@ TEST_F(IoTest, ZlibIoInputAutodetect) {
   delete [] buffer;
 }
 
-std::string IoTest::Compress(const std::string& data,
+string IoTest::Compress(const string& data,
                         const GzipOutputStream::Options& options) {
-  std::string result;
+  string result;
   {
     StringOutputStream output(&result);
     GzipOutputStream gzout(&output, options);
@@ -448,8 +542,8 @@ std::string IoTest::Compress(const std::string& data,
   return result;
 }
 
-std::string IoTest::Uncompress(const std::string& data) {
-  std::string result;
+string IoTest::Uncompress(const string& data) {
+  string result;
   {
     ArrayInputStream input(data.data(), data.size());
     GzipInputStream gzin(&input);
@@ -465,21 +559,21 @@ std::string IoTest::Uncompress(const std::string& data) {
 TEST_F(IoTest, CompressionOptions) {
   // Some ad-hoc testing of compression options.
 
-  std::string golden;
+  string golden;
   File::ReadFileToStringOrDie(
     TestSourceDir() + "/google/protobuf/testdata/golden_message",
     &golden);
 
   GzipOutputStream::Options options;
-  std::string gzip_compressed = Compress(golden, options);
+  string gzip_compressed = Compress(golden, options);
 
   options.compression_level = 0;
-  std::string not_compressed = Compress(golden, options);
+  string not_compressed = Compress(golden, options);
 
   // Try zlib compression for fun.
   options = GzipOutputStream::Options();
   options.format = GzipOutputStream::ZLIB;
-  std::string zlib_compressed = Compress(golden, options);
+  string zlib_compressed = Compress(golden, options);
 
   // Uncompressed should be bigger than the original since it should have some
   // sort of header.
@@ -567,7 +661,7 @@ TEST_F(IoTest, TwoSessionWriteGzip) {
 // explicit block sizes.  So, we'll only run one test and we'll use
 // ArrayInput to read back the results.
 TEST_F(IoTest, StringIo) {
-  std::string str;
+  string str;
   {
     StringOutputStream output(&str);
     WriteStuff(&output);
@@ -581,7 +675,7 @@ TEST_F(IoTest, StringIo) {
 
 // To test files, we create a temporary file, write, read, truncate, repeat.
 TEST_F(IoTest, FileIo) {
-  std::string filename = TestTempDir() + "/zero_copy_stream_test_file";
+  string filename = TestTempDir() + "/zero_copy_stream_test_file";
 
   for (int i = 0; i < kBlockSizeCount; i++) {
     for (int j = 0; j < kBlockSizeCount; j++) {
@@ -612,7 +706,7 @@ TEST_F(IoTest, FileIo) {
 
 #if HAVE_ZLIB
 TEST_F(IoTest, GzipFileIo) {
-  std::string filename = TestTempDir() + "/zero_copy_stream_test_file";
+  string filename = TestTempDir() + "/zero_copy_stream_test_file";
 
   for (int i = 0; i < kBlockSizeCount; i++) {
     for (int j = 0; j < kBlockSizeCount; j++) {
@@ -745,7 +839,7 @@ TEST_F(IoTest, IostreamIo) {
   for (int i = 0; i < kBlockSizeCount; i++) {
     for (int j = 0; j < kBlockSizeCount; j++) {
       {
-		  std::stringstream stream;
+        stringstream stream;
 
         {
           OstreamOutputStream output(&stream, kBlockSizes[i]);
@@ -761,7 +855,7 @@ TEST_F(IoTest, IostreamIo) {
       }
 
       {
-        std::stringstream stream;
+        stringstream stream;
 
         {
           OstreamOutputStream output(&stream, kBlockSizes[i]);

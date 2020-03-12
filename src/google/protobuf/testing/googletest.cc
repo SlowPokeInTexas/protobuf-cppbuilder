@@ -38,12 +38,9 @@
 #include <sys/types.h>
 #include <errno.h>
 #include <stdlib.h>
-#if defined(_MSC_VER)
+#ifdef _MSC_VER
 #include <io.h>
 #include <direct.h>
-#elif defined(__BORLANDC__)
-#include <dir.h>
-#include <io.h>
 #else
 #include <unistd.h>
 #endif
@@ -67,10 +64,10 @@ namespace protobuf {
 #endif
 #endif
 
-std::string TestSourceDir() {
+string TestSourceDir() {
 #ifdef _MSC_VER
   // Look for the "src" directory.
-  std::string prefix = ".";
+  string prefix = ".";
 
   while (!File::Exists(prefix + "/src/google/protobuf")) {
     if (!File::Exists(prefix)) {
@@ -95,16 +92,16 @@ std::string TestSourceDir() {
 
 namespace {
 
-std::string GetTemporaryDirectoryName() {
+string GetTemporaryDirectoryName() {
   // tmpnam() is generally not considered safe but we're only using it for
   // testing.  We cannot use tmpfile() or mkstemp() since we're creating a
   // directory.
   char b[L_tmpnam + 1];     // HPUX multithread return 0 if s is 0
-  std::string result = tmpnam(b);
+  string result = tmpnam(b);
 #ifdef _WIN32
   // On Win32, tmpnam() returns a file prefixed with '\', but which is supposed
   // to be used in the current working directory.  WTF?
-  if (protobuf::HasPrefixString(result, "\\")) {
+  if (HasPrefixString(result, "\\")) {
     result.erase(0, 1);
   }
 #endif  // _WIN32
@@ -122,7 +119,7 @@ class TempDirDeleter {
     }
   }
 
-  std::string GetTempDir() {
+  string GetTempDir() {
     if (name_.empty()) {
       name_ = GetTemporaryDirectoryName();
       GOOGLE_CHECK(mkdir(name_.c_str(), 0777) == 0) << strerror(errno);
@@ -135,21 +132,21 @@ class TempDirDeleter {
   }
 
  private:
-  std::string name_;
+  string name_;
 };
 
 TempDirDeleter temp_dir_deleter_;
 
 }  // namespace
 
-std::string TestTempDir() {
+string TestTempDir() {
   return temp_dir_deleter_.GetTempDir();
 }
 
 // TODO(kenton):  Share duplicated code below.  Too busy/lazy for now.
 
-static std::string stdout_capture_filename_;
-static std::string stderr_capture_filename_;
+static string stdout_capture_filename_;
+static string stderr_capture_filename_;
 static int original_stdout_ = -1;
 static int original_stderr_ = -1;
 
@@ -183,14 +180,14 @@ void CaptureTestStderr() {
   close(fd);
 }
 
-std::string GetCapturedTestStdout() {
+string GetCapturedTestStdout() {
   GOOGLE_CHECK_NE(original_stdout_, -1) << "Not capturing.";
 
   close(1);
   dup2(original_stdout_, 1);
   original_stdout_ = -1;
 
-  std::string result;
+  string result;
   File::ReadFileToStringOrDie(stdout_capture_filename_, &result);
 
   remove(stdout_capture_filename_.c_str());
@@ -198,14 +195,14 @@ std::string GetCapturedTestStdout() {
   return result;
 }
 
-std::string GetCapturedTestStderr() {
+string GetCapturedTestStderr() {
   GOOGLE_CHECK_NE(original_stderr_, -1) << "Not capturing.";
 
   close(2);
   dup2(original_stderr_, 2);
   original_stderr_ = -1;
 
-  std::string result;
+  string result;
   File::ReadFileToStringOrDie(stderr_capture_filename_, &result);
 
   remove(stderr_capture_filename_.c_str());
@@ -226,16 +223,17 @@ ScopedMemoryLog::~ScopedMemoryLog() {
   active_log_ = NULL;
 }
 
-const std::vector<std::string>& ScopedMemoryLog::GetMessages(LogLevel dummy) const {
-  GOOGLE_CHECK_EQ(dummy, ERROR);
-  return messages_;
+const vector<string>& ScopedMemoryLog::GetMessages(LogLevel level) {
+  GOOGLE_CHECK(level == ERROR ||
+               level == WARNING);
+  return messages_[level];
 }
 
 void ScopedMemoryLog::HandleLog(LogLevel level, const char* filename,
-                                int line, const std::string& message) {
+                                int line, const string& message) {
   GOOGLE_CHECK(active_log_ != NULL);
-  if (level == ERROR) {
-    active_log_->messages_.push_back(message);
+  if (level == ERROR || level == WARNING) {
+    active_log_->messages_[level].push_back(message);
   }
 }
 

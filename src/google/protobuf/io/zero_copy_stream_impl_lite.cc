@@ -32,9 +32,13 @@
 //  Based on original Protocol Buffers design by
 //  Sanjay Ghemawat, Jeff Dean, and others.
 
-#include <google/protobuf/io/zero_copy_stream_impl.h>
+#include <google/protobuf/io/zero_copy_stream_impl_lite.h>
 #include <google/protobuf/stubs/common.h>
-#include <google/protobuf/stubs/stl_util-inl.h>
+#include <google/protobuf/stubs/stl_util.h>
+#include <algorithm>
+
+using std::min;
+using std::max;
 
 namespace google {
 namespace protobuf {
@@ -63,7 +67,7 @@ ArrayInputStream::~ArrayInputStream() {
 
 bool ArrayInputStream::Next(const void** data, int* size) {
   if (position_ < size_) {
-    last_returned_size_ = std::min(block_size_, size_ - position_);
+    last_returned_size_ = min(block_size_, size_ - position_);
     *data = data_ + position_;
     *size = last_returned_size_;
     position_ += last_returned_size_;
@@ -116,7 +120,7 @@ ArrayOutputStream::~ArrayOutputStream() {
 
 bool ArrayOutputStream::Next(void** data, int* size) {
   if (position_ < size_) {
-    last_returned_size_ = std::min(block_size_, size_ - position_);
+    last_returned_size_ = min(block_size_, size_ - position_);
     *data = data_ + position_;
     *size = last_returned_size_;
     position_ += last_returned_size_;
@@ -143,7 +147,7 @@ int64 ArrayOutputStream::ByteCount() const {
 
 // ===================================================================
 
-StringOutputStream::StringOutputStream(std::string* target)
+StringOutputStream::StringOutputStream(string* target)
   : target_(target) {
 }
 
@@ -157,17 +161,17 @@ bool StringOutputStream::Next(void** data, int* size) {
   if (old_size < target_->capacity()) {
     // Resize the string to match its capacity, since we can get away
     // without a memory allocation this way.
-    protobuf::STLStringResizeUninitialized(target_, target_->capacity());
+    STLStringResizeUninitialized(target_, target_->capacity());
   } else {
     // Size has reached capacity, so double the size.  Also make sure
     // that the new size is at least kMinimumSize.
-    protobuf::STLStringResizeUninitialized(
+    STLStringResizeUninitialized(
       target_,
-      std::max(old_size * 2,
+      max(old_size * 2,
           kMinimumSize + 0));  // "+ 0" works around GCC4 weirdness.
   }
 
-  *data = protobuf::string_as_array(target_) + old_size;
+  *data = string_as_array(target_) + old_size;
   *size = target_->size() - old_size;
   return true;
 }
@@ -190,7 +194,7 @@ int CopyingInputStream::Skip(int count) {
   char junk[4096];
   int skipped = 0;
   while (skipped < count) {
-    int bytes = Read(junk, std::min(count - skipped,
+    int bytes = Read(junk, min(count - skipped,
                                implicit_cast<int>(sizeof(junk))));
     if (bytes <= 0) {
       // EOF or read error.

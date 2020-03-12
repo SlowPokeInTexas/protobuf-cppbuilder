@@ -32,6 +32,7 @@
 //  Based on original Protocol Buffers design by
 //  Sanjay Ghemawat, Jeff Dean, and others.
 
+#include <istream>
 #include <stack>
 #include <google/protobuf/stubs/hash.h>
 
@@ -43,11 +44,12 @@
 #include <google/protobuf/io/zero_copy_stream_impl.h>
 #include <google/protobuf/descriptor.pb.h>
 #include <google/protobuf/descriptor.h>
+#include <google/protobuf/generated_message_util.h>
 #include <google/protobuf/reflection_ops.h>
 #include <google/protobuf/wire_format.h>
 #include <google/protobuf/stubs/strutil.h>
 #include <google/protobuf/stubs/map-util.h>
-#include <google/protobuf/stubs/stl_util-inl.h>
+#include <google/protobuf/stubs/stl_util.h>
 
 namespace google {
 namespace protobuf {
@@ -79,7 +81,7 @@ void Message::CopyFrom(const Message& from) {
   ReflectionOps::Copy(from, this);
 }
 
-std::string Message::GetTypeName() const {
+string Message::GetTypeName() const {
   return GetDescriptor()->full_name();
 }
 
@@ -91,12 +93,12 @@ bool Message::IsInitialized() const {
   return ReflectionOps::IsInitialized(*this);
 }
 
-void Message::FindInitializationErrors(std::vector<std::string>* errors) const {
+void Message::FindInitializationErrors(vector<string>* errors) const {
   return ReflectionOps::FindInitializationErrors(*this, "", errors);
 }
 
-std::string Message::InitializationErrorString() const {
-  std::vector<std::string> errors;
+string Message::InitializationErrorString() const {
+  vector<string> errors;
   FindInitializationErrors(&errors);
   return JoinStrings(errors, ", ");
 }
@@ -125,12 +127,12 @@ bool Message::ParsePartialFromFileDescriptor(int file_descriptor) {
   return ParsePartialFromZeroCopyStream(&input) && input.GetErrno() == 0;
 }
 
-bool Message::ParseFromIstream(std::istream* input) {
+bool Message::ParseFromIstream(istream* input) {
   io::IstreamInputStream zero_copy_input(input);
   return ParseFromZeroCopyStream(&zero_copy_input) && input->eof();
 }
 
-bool Message::ParsePartialFromIstream(std::istream* input) {
+bool Message::ParsePartialFromIstream(istream* input) {
   io::IstreamInputStream zero_copy_input(input);
   return ParsePartialFromZeroCopyStream(&zero_copy_input) && input->eof();
 }
@@ -167,7 +169,7 @@ bool Message::SerializePartialToFileDescriptor(int file_descriptor) const {
   return SerializePartialToZeroCopyStream(&output);
 }
 
-bool Message::SerializeToOstream(std::ostream* output) const {
+bool Message::SerializeToOstream(ostream* output) const {
   {
     io::OstreamOutputStream zero_copy_output(output);
     if (!SerializeToZeroCopyStream(&zero_copy_output)) return false;
@@ -175,15 +177,52 @@ bool Message::SerializeToOstream(std::ostream* output) const {
   return output->good();
 }
 
-bool Message::SerializePartialToOstream(std::ostream* output) const {
+bool Message::SerializePartialToOstream(ostream* output) const {
   io::OstreamOutputStream zero_copy_output(output);
   return SerializePartialToZeroCopyStream(&zero_copy_output);
 }
 
 
+// =============================================================================
+// Reflection and associated Template Specializations
+
 Reflection::~Reflection() {}
 
-// ===================================================================
+#define HANDLE_TYPE(TYPE, CPPTYPE, CTYPE)                             \
+template<>                                                            \
+const RepeatedField<TYPE>& Reflection::GetRepeatedField<TYPE>(        \
+    const Message& message, const FieldDescriptor* field) const {     \
+  return *static_cast<RepeatedField<TYPE>* >(                         \
+      MutableRawRepeatedField(const_cast<Message*>(&message),         \
+                          field, CPPTYPE, CTYPE, NULL));              \
+}                                                                     \
+                                                                      \
+template<>                                                            \
+RepeatedField<TYPE>* Reflection::MutableRepeatedField<TYPE>(          \
+    Message* message, const FieldDescriptor* field) const {           \
+  return static_cast<RepeatedField<TYPE>* >(                          \
+      MutableRawRepeatedField(message, field, CPPTYPE, CTYPE, NULL)); \
+}
+
+HANDLE_TYPE(int32,  FieldDescriptor::CPPTYPE_INT32,  -1);
+HANDLE_TYPE(int64,  FieldDescriptor::CPPTYPE_INT64,  -1);
+HANDLE_TYPE(uint32, FieldDescriptor::CPPTYPE_UINT32, -1);
+HANDLE_TYPE(uint64, FieldDescriptor::CPPTYPE_UINT64, -1);
+HANDLE_TYPE(float,  FieldDescriptor::CPPTYPE_FLOAT,  -1);
+HANDLE_TYPE(double, FieldDescriptor::CPPTYPE_DOUBLE, -1);
+HANDLE_TYPE(bool,   FieldDescriptor::CPPTYPE_BOOL,   -1);
+
+
+#undef HANDLE_TYPE
+
+void* Reflection::MutableRawRepeatedString(
+    Message* message, const FieldDescriptor* field, bool is_string) const {
+  return MutableRawRepeatedField(message, field,
+      FieldDescriptor::CPPTYPE_STRING, FieldOptions::STRING, NULL);
+}
+
+
+// =============================================================================
 // MessageFactory
 
 MessageFactory::~MessageFactory() {}
@@ -197,7 +236,7 @@ class GeneratedMessageFactory : public MessageFactory {
 
   static GeneratedMessageFactory* singleton();
 
-  typedef void RegistrationFunc(const std::string&);
+  typedef void RegistrationFunc(const string&);
   void RegisterFile(const char* file, RegistrationFunc* registration_func);
   void RegisterType(const Descriptor* descriptor, const Message* prototype);
 
@@ -257,6 +296,7 @@ void GeneratedMessageFactory::RegisterType(const Descriptor* descriptor,
   }
 }
 
+
 const Message* GeneratedMessageFactory::GetPrototype(const Descriptor* type) {
   {
     ReaderMutexLock lock(&mutex_);
@@ -303,7 +343,7 @@ MessageFactory* MessageFactory::generated_factory() {
 }
 
 void MessageFactory::InternalRegisterGeneratedFile(
-    const char* filename, void (*register_messages)(const std::string&)) {
+    const char* filename, void (*register_messages)(const string&)) {
   GeneratedMessageFactory::singleton()->RegisterFile(filename,
                                                      register_messages);
 }

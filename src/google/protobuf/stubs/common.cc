@@ -81,7 +81,7 @@ void VerifyVersion(int headerVersion,
   }
 }
 
-std::string VersionString(int version) {
+string VersionString(int version) {
   int major = version / 1000000;
   int minor = (version / 1000) % 1000;
   int micro = version % 1000;
@@ -105,18 +105,18 @@ std::string VersionString(int version) {
 namespace internal {
 
 void DefaultLogHandler(LogLevel level, const char* filename, int line,
-                       const std::string& message) {
+                       const string& message) {
   static const char* level_names[] = { "INFO", "WARNING", "ERROR", "FATAL" };
 
   // We use fprintf() instead of cerr because we want this to work at static
   // initialization time.
-  fprintf(stderr, "libprotobuf %s %s:%d] %s\n",
+  fprintf(stderr, "[libprotobuf %s %s:%d] %s\n",
           level_names[level], filename, line, message.c_str());
   fflush(stderr);  // Needed on MSVC.
 }
 
 void NullLogHandler(LogLevel level, const char* filename, int line,
-                    const std::string& message) {
+                    const string& message) {
   // Nothing.
 }
 
@@ -138,7 +138,7 @@ void InitLogSilencerCountOnce() {
   GoogleOnceInit(&log_silencer_count_init_, &InitLogSilencerCount);
 }
 
-LogMessage& LogMessage::operator<<(const std::string& value) {
+LogMessage& LogMessage::operator<<(const string& value) {
   message_ += value;
   return *this;
 }
@@ -183,15 +183,15 @@ void LogMessage::Finish() {
   if (level_ != LOGLEVEL_FATAL) {
     InitLogSilencerCountOnce();
     MutexLock lock(log_silencer_count_mutex_);
-    suppress = internal::log_silencer_count_ > 0;
+    suppress = log_silencer_count_ > 0;
   }
 
   if (!suppress) {
-    internal::log_handler_(level_, filename_, line_, message_);
+    log_handler_(level_, filename_, line_, message_);
   }
 
   if (level_ == LOGLEVEL_FATAL) {
-#ifdef PROTOBUF_USE_EXCEPTIONS
+#if PROTOBUF_USE_EXCEPTIONS
     throw FatalException(filename_, line_, message_);
 #else
     abort();
@@ -252,7 +252,6 @@ struct Mutex::Internal {
 #endif
 };
 
-namespace internal {
 Mutex::Mutex()
   : mInternal(new Internal) {
   InitializeCriticalSection(&mInternal->mutex);
@@ -282,7 +281,6 @@ void Mutex::AssertHeld() {
   GOOGLE_DCHECK_EQ(mInternal->thread_id, GetCurrentThreadId());
 #endif
 }
-} // namespace internal
 
 #elif defined(HAVE_PTHREAD)
 
@@ -322,17 +320,35 @@ void Mutex::AssertHeld() {
 #endif
 
 // ===================================================================
+// emulates google3/util/endian/endian.h
+//
+// TODO(xiaofeng): PROTOBUF_LITTLE_ENDIAN is unfortunately defined in
+// google/protobuf/io/coded_stream.h and therefore can not be used here.
+// Maybe move that macro definition here in the furture.
+uint32 ghtonl(uint32 x) {
+  union {
+    uint32 result;
+    uint8 result_array[4];
+  };
+  result_array[0] = static_cast<uint8>(x >> 24);
+  result_array[1] = static_cast<uint8>((x >> 16) & 0xFF);
+  result_array[2] = static_cast<uint8>((x >> 8) & 0xFF);
+  result_array[3] = static_cast<uint8>(x & 0xFF);
+  return result;
+}
+
+// ===================================================================
 // Shutdown support.
 
 namespace internal {
 
 typedef void OnShutdownFunc();
-std::vector<void (*)()>* shutdown_functions = NULL;
+vector<void (*)()>* shutdown_functions = NULL;
 Mutex* shutdown_functions_mutex = NULL;
 GOOGLE_PROTOBUF_DECLARE_ONCE(shutdown_functions_init);
 
 void InitShutdownFunctions() {
-  shutdown_functions = new std::vector<void (*)()>;
+  shutdown_functions = new vector<void (*)()>;
   shutdown_functions_mutex = new Mutex;
 }
 
@@ -367,7 +383,7 @@ void ShutdownProtobufLibrary() {
   internal::shutdown_functions_mutex = NULL;
 }
 
-#ifdef PROTOBUF_USE_EXCEPTIONS
+#if PROTOBUF_USE_EXCEPTIONS
 FatalException::~FatalException() throw() {}
 
 const char* FatalException::what() const throw() {

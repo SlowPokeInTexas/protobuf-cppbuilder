@@ -34,6 +34,7 @@
 
 #include <google/protobuf/extension_set.h>
 #include <google/protobuf/unittest.pb.h>
+#include <google/protobuf/unittest_mset.pb.h>
 #include <google/protobuf/test_util.h>
 #include <google/protobuf/descriptor.pb.h>
 #include <google/protobuf/descriptor.h>
@@ -46,9 +47,10 @@
 #include <google/protobuf/stubs/strutil.h>
 #include <google/protobuf/testing/googletest.h>
 #include <gtest/gtest.h>
-#include <google/protobuf/stubs/stl_util-inl.h>
+#include <google/protobuf/stubs/stl_util.h>
 
 namespace google {
+
 namespace protobuf {
 namespace internal {
 namespace {
@@ -140,21 +142,96 @@ TEST(ExtensionSetTest, ClearOneField) {
   TestUtil::ExpectAllExtensionsSet(message);
 }
 
+TEST(ExtensionSetTest, SetAllocatedExtensin) {
+  unittest::TestAllExtensions message;
+  EXPECT_FALSE(message.HasExtension(
+      unittest::optional_foreign_message_extension));
+  // Add a extension using SetAllocatedExtension
+  unittest::ForeignMessage* foreign_message = new unittest::ForeignMessage();
+  message.SetAllocatedExtension(unittest::optional_foreign_message_extension,
+                                foreign_message);
+  EXPECT_TRUE(message.HasExtension(
+      unittest::optional_foreign_message_extension));
+  EXPECT_EQ(foreign_message,
+            message.MutableExtension(
+                unittest::optional_foreign_message_extension));
+  EXPECT_EQ(foreign_message,
+            &message.GetExtension(
+                unittest::optional_foreign_message_extension));
+
+  // SetAllocatedExtension should delete the previously existing extension.
+  // (We reply on unittest to check memory leaks for this case)
+  message.SetAllocatedExtension(unittest::optional_foreign_message_extension,
+                                 new unittest::ForeignMessage());
+
+  // SetAllocatedExtension with a NULL parameter is equivalent to ClearExtenion.
+  message.SetAllocatedExtension(unittest::optional_foreign_message_extension,
+                                 NULL);
+  EXPECT_FALSE(message.HasExtension(
+      unittest::optional_foreign_message_extension));
+}
+
+TEST(ExtensionSetTest, ReleaseExtension) {
+  unittest::TestMessageSet message;
+  EXPECT_FALSE(message.HasExtension(
+      unittest::TestMessageSetExtension1::message_set_extension));
+  // Add a extension using SetAllocatedExtension
+  unittest::TestMessageSetExtension1* extension =
+      new unittest::TestMessageSetExtension1();
+  message.SetAllocatedExtension(
+      unittest::TestMessageSetExtension1::message_set_extension,
+      extension);
+  EXPECT_TRUE(message.HasExtension(
+      unittest::TestMessageSetExtension1::message_set_extension));
+  // Release the extension using ReleaseExtension
+  unittest::TestMessageSetExtension1* released_extension =
+      message.ReleaseExtension(
+        unittest::TestMessageSetExtension1::message_set_extension);
+  EXPECT_EQ(extension, released_extension);
+  EXPECT_FALSE(message.HasExtension(
+      unittest::TestMessageSetExtension1::message_set_extension));
+  // ReleaseExtension will return the underlying object even after
+  // ClearExtension is called.
+  message.SetAllocatedExtension(
+      unittest::TestMessageSetExtension1::message_set_extension,
+      extension);
+  message.ClearExtension(
+      unittest::TestMessageSetExtension1::message_set_extension);
+  released_extension = message.ReleaseExtension(
+        unittest::TestMessageSetExtension1::message_set_extension);
+  EXPECT_TRUE(released_extension != NULL);
+  delete released_extension;
+}
+
+
 TEST(ExtensionSetTest, CopyFrom) {
   unittest::TestAllExtensions message1, message2;
-  std::string data;
 
   TestUtil::SetAllExtensions(&message1);
   message2.CopyFrom(message1);
   TestUtil::ExpectAllExtensionsSet(message2);
+  message2.CopyFrom(message1);  // exercise copy when fields already exist
+  TestUtil::ExpectAllExtensionsSet(message2);
+}
+
+TEST(ExtensioSetTest, CopyFromPacked) {
+  unittest::TestPackedExtensions message1, message2;
+
+  TestUtil::SetPackedExtensions(&message1);
+  message2.CopyFrom(message1);
+  TestUtil::ExpectPackedExtensionsSet(message2);
+  message2.CopyFrom(message1);  // exercise copy when fields already exist
+  TestUtil::ExpectPackedExtensionsSet(message2);
 }
 
 TEST(ExtensionSetTest, CopyFromUpcasted) {
   unittest::TestAllExtensions message1, message2;
-  std::string data;
   const Message& upcasted_message = message1;
 
   TestUtil::SetAllExtensions(&message1);
+  message2.CopyFrom(upcasted_message);
+  TestUtil::ExpectAllExtensionsSet(message2);
+  // exercise copy when fields already exist
   message2.CopyFrom(upcasted_message);
   TestUtil::ExpectAllExtensionsSet(message2);
 }
@@ -190,9 +267,9 @@ TEST(ExtensionSetTest, SerializationToArray) {
   unittest::TestAllTypes destination;
   TestUtil::SetAllExtensions(&source);
   int size = source.ByteSize();
-  std::string data;
+  string data;
   data.resize(size);
-  uint8* target = reinterpret_cast<uint8*>(protobuf::string_as_array(&data));
+  uint8* target = reinterpret_cast<uint8*>(string_as_array(&data));
   uint8* end = source.SerializeWithCachedSizesToArray(target);
   EXPECT_EQ(size, end - target);
   EXPECT_TRUE(destination.ParseFromString(data));
@@ -211,10 +288,10 @@ TEST(ExtensionSetTest, SerializationToStream) {
   unittest::TestAllTypes destination;
   TestUtil::SetAllExtensions(&source);
   int size = source.ByteSize();
-  std::string data;
+  string data;
   data.resize(size);
   {
-    io::ArrayOutputStream array_stream(protobuf::string_as_array(&data), size, 1);
+    io::ArrayOutputStream array_stream(string_as_array(&data), size, 1);
     io::CodedOutputStream output_stream(&array_stream);
     source.SerializeWithCachedSizes(&output_stream);
     ASSERT_FALSE(output_stream.HadError());
@@ -228,15 +305,15 @@ TEST(ExtensionSetTest, PackedSerializationToArray) {
   // wire compatibility of extensions.
   //
   // This checks serialization to a flat array by explicitly reserving space in
-  // the std::string and calling the generated message's
+  // the string and calling the generated message's
   // SerializeWithCachedSizesToArray.
   unittest::TestPackedExtensions source;
   unittest::TestPackedTypes destination;
   TestUtil::SetPackedExtensions(&source);
   int size = source.ByteSize();
-  std::string data;
+  string data;
   data.resize(size);
-  uint8* target = reinterpret_cast<uint8*>(protobuf::string_as_array(&data));
+  uint8* target = reinterpret_cast<uint8*>(string_as_array(&data));
   uint8* end = source.SerializeWithCachedSizesToArray(target);
   EXPECT_EQ(size, end - target);
   EXPECT_TRUE(destination.ParseFromString(data));
@@ -255,10 +332,10 @@ TEST(ExtensionSetTest, PackedSerializationToStream) {
   unittest::TestPackedTypes destination;
   TestUtil::SetPackedExtensions(&source);
   int size = source.ByteSize();
-  std::string data;
+  string data;
   data.resize(size);
   {
-    io::ArrayOutputStream array_stream(protobuf::string_as_array(&data), size, 1);
+    io::ArrayOutputStream array_stream(string_as_array(&data), size, 1);
     io::CodedOutputStream output_stream(&array_stream);
     source.SerializeWithCachedSizes(&output_stream);
     ASSERT_FALSE(output_stream.HadError());
@@ -271,7 +348,7 @@ TEST(ExtensionSetTest, Parsing) {
   // Serialize as TestAllTypes and parse as TestAllExtensions.
   unittest::TestAllTypes source;
   unittest::TestAllExtensions destination;
-  std::string data;
+  string data;
 
   TestUtil::SetAllFields(&source);
   source.SerializeToString(&data);
@@ -283,7 +360,7 @@ TEST(ExtensionSetTest, PackedParsing) {
   // Serialize as TestPackedTypes and parse as TestPackedExtensions.
   unittest::TestPackedTypes source;
   unittest::TestPackedExtensions destination;
-  std::string data;
+  string data;
 
   TestUtil::SetPackedFields(&source);
   source.SerializeToString(&data);
@@ -374,7 +451,7 @@ TEST(ExtensionSetTest, SpaceUsedExcludingSelf) {
     // that gets included as well.
     unittest::TestAllExtensions message;
     const int base_size = message.SpaceUsed();
-    const std::string s("this is a fairly large string that will cause some "
+    const string s("this is a fairly large string that will cause some "
                    "allocation in order to store it in the extension");
     message.SetExtension(unittest::optional_string_extension, s);
     int min_expected_size = base_size + s.length();
@@ -418,7 +495,8 @@ TEST(ExtensionSetTest, SpaceUsedExcludingSelf) {
     for (int i = 0; i < 16; ++i) {                                             \
       message.AddExtension(unittest::repeated_##type##_extension, value);      \
     }                                                                          \
-    int expected_size = sizeof(cpptype) * 16 + empty_repeated_field_size;      \
+    int expected_size = sizeof(cpptype) * (16 -                                \
+        kMinRepeatedFieldAllocationSize) + empty_repeated_field_size;          \
     EXPECT_EQ(expected_size, message.SpaceUsed()) << #type;                    \
   } while (0)
 
@@ -442,15 +520,16 @@ TEST(ExtensionSetTest, SpaceUsedExcludingSelf) {
   {
     unittest::TestAllExtensions message;
     const int base_size = message.SpaceUsed();
-    int min_expected_size = sizeof(RepeatedPtrField<std::string>) + base_size;
-    const std::string value(256, 'x');
+    int min_expected_size = sizeof(RepeatedPtrField<string>) + base_size;
+    const string value(256, 'x');
     // Once items are allocated, they may stick around even when cleared so
     // without the hardcore memory management accessors there isn't a notion of
     // the empty repeated field memory usage as there is with primitive types.
     for (int i = 0; i < 16; ++i) {
       message.AddExtension(unittest::repeated_string_extension, value);
     }
-    min_expected_size += (sizeof(value) + value.size()) * 16;
+    min_expected_size += (sizeof(value) + value.size()) *
+        (16 - kMinRepeatedFieldAllocationSize);
     EXPECT_LE(min_expected_size, message.SpaceUsed());
   }
   // Repeated messages
@@ -465,12 +544,13 @@ TEST(ExtensionSetTest, SpaceUsedExcludingSelf) {
       message.AddExtension(unittest::repeated_foreign_message_extension)->
           CopyFrom(prototype);
     }
-    min_expected_size += 16 * prototype.SpaceUsed();
+    min_expected_size +=
+        (16 - kMinRepeatedFieldAllocationSize) * prototype.SpaceUsed();
     EXPECT_LE(min_expected_size, message.SpaceUsed());
   }
 }
 
-#ifdef GTEST_HAS_DEATH_TEST
+#ifdef PROTOBUF_HAS_DEATH_TEST
 
 TEST(ExtensionSetTest, InvalidEnumDeath) {
   unittest::TestAllExtensions message;
@@ -480,7 +560,7 @@ TEST(ExtensionSetTest, InvalidEnumDeath) {
     "IsValid");
 }
 
-#endif  // GTEST_HAS_DEATH_TEST
+#endif  // PROTOBUF_HAS_DEATH_TEST
 
 TEST(ExtensionSetTest, DynamicExtensions) {
   // Test adding a dynamic extension to a compiled-in message object.
@@ -513,10 +593,10 @@ TEST(ExtensionSetTest, DynamicExtensions) {
 
     // If the field refers to one of the types nested in TestDynamicExtensions,
     // make it refer to the type in our dynamic proto instead.
-    std::string prefix = "." + template_descriptor->full_name() + ".";
+    string prefix = "." + template_descriptor->full_name() + ".";
     if (extension->has_type_name()) {
-      std::string* type_name = extension->mutable_type_name();
-      if (protobuf::HasPrefixString(*type_name, prefix)) {
+      string* type_name = extension->mutable_type_name();
+      if (HasPrefixString(*type_name, prefix)) {
         type_name->replace(0, prefix.size(), ".dynamic_extensions.");
       }
     }
@@ -532,7 +612,7 @@ TEST(ExtensionSetTest, DynamicExtensions) {
   // Construct a message that we can parse with the extensions we defined.
   // Since the extensions were based off of the fields of TestDynamicExtensions,
   // we can use that message to create this test message.
-  std::string data;
+  string data;
   {
     unittest::TestDynamicExtensions message;
     message.set_scalar_extension(123);
@@ -615,7 +695,11 @@ TEST(ExtensionSetTest, DynamicExtensions) {
     const Message& sub_message =
         message.GetReflection()->GetMessage(message, message_extension);
     const unittest::ForeignMessage* typed_sub_message =
+#ifdef GOOGLE_PROTOBUF_NO_RTTI
+        static_cast<const unittest::ForeignMessage*>(&sub_message);
+#else
         dynamic_cast<const unittest::ForeignMessage*>(&sub_message);
+#endif
     ASSERT_TRUE(typed_sub_message != NULL);
     EXPECT_EQ(456, typed_sub_message->c());
   }

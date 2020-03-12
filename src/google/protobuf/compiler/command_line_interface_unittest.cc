@@ -35,7 +35,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
-#if defined(_MSC_VER) || defined(__BORLANDC__)
+#ifdef _MSC_VER
 #include <io.h>
 #else
 #include <unistd.h>
@@ -84,7 +84,7 @@ class CommandLineInterfaceTest : public testing::Test {
   // Runs the CommandLineInterface with the given command line.  The
   // command is automatically split on spaces, and the string "$tmpdir"
   // is replaced with TestTempDir().
-  void Run(const std::string& command);
+  void Run(const string& command);
 
   // -----------------------------------------------------------------
   // Methods to set up the test (called before Run()).
@@ -97,10 +97,10 @@ class CommandLineInterfaceTest : public testing::Test {
 
   // Create a temp file within temp_directory_ with the given name.
   // The containing directory is also created if necessary.
-  void CreateTempFile(const std::string& name, const std::string& contents);
+  void CreateTempFile(const string& name, const string& contents);
 
   // Create a subdirectory within temp_directory_.
-  void CreateTempDir(const std::string& name);
+  void CreateTempDir(const string& name);
 
   void SetInputsAreProtoPathRelative(bool enable) {
     cli_.SetInputsAreProtoPathRelative(enable);
@@ -116,15 +116,19 @@ class CommandLineInterfaceTest : public testing::Test {
   // Checks that Run() returned non-zero and the stderr output is exactly
   // the text given.  expected_test may contain references to "$tmpdir",
   // which will be replaced by the temporary directory path.
-  void ExpectErrorText(const std::string& expected_text);
+  void ExpectErrorText(const string& expected_text);
 
   // Checks that Run() returned non-zero and the stderr contains the given
   // substring.
-  void ExpectErrorSubstring(const std::string& expected_substring);
+  void ExpectErrorSubstring(const string& expected_substring);
+
+  // Like ExpectErrorSubstring, but checks that Run() returned zero.
+  void ExpectErrorSubstringWithZeroReturnCode(
+      const string& expected_substring);
 
   // Returns true if ExpectErrorSubstring(expected_substring) would pass, but
   // does not fail otherwise.
-  bool HasAlternateErrorSubstring(const std::string& expected_substring);
+  bool HasAlternateErrorSubstring(const string& expected_substring);
 
   // Checks that MockCodeGenerator::Generate() was called in the given
   // context (or the generator in test_plugin.cc, which produces the same
@@ -135,28 +139,28 @@ class CommandLineInterfaceTest : public testing::Test {
   // generate given these inputs.  message_name is the name of the first
   // message that appeared in the proto file; this is just to make extra
   // sure that the correct file was parsed.
-  void ExpectGenerated(const std::string& generator_name,
-                       const std::string& parameter,
-                       const std::string& proto_name,
-                       const std::string& message_name);
-  void ExpectGenerated(const std::string& generator_name,
-                       const std::string& parameter,
-                       const std::string& proto_name,
-                       const std::string& message_name,
-                       const std::string& output_directory);
-  void ExpectGeneratedWithMultipleInputs(const std::string& generator_name,
-                                         const std::string& all_proto_names,
-                                         const std::string& proto_name,
-                                         const std::string& message_name);
-  void ExpectGeneratedWithInsertions(const std::string& generator_name,
-                                     const std::string& parameter,
-                                     const std::string& insertions,
-                                     const std::string& proto_name,
-                                     const std::string& message_name);
+  void ExpectGenerated(const string& generator_name,
+                       const string& parameter,
+                       const string& proto_name,
+                       const string& message_name);
+  void ExpectGenerated(const string& generator_name,
+                       const string& parameter,
+                       const string& proto_name,
+                       const string& message_name,
+                       const string& output_directory);
+  void ExpectGeneratedWithMultipleInputs(const string& generator_name,
+                                         const string& all_proto_names,
+                                         const string& proto_name,
+                                         const string& message_name);
+  void ExpectGeneratedWithInsertions(const string& generator_name,
+                                     const string& parameter,
+                                     const string& insertions,
+                                     const string& proto_name,
+                                     const string& message_name);
 
-  void ExpectNullCodeGeneratorCalled(const std::string& parameter);
+  void ExpectNullCodeGeneratorCalled(const string& parameter);
 
-  void ReadDescriptorSet(const std::string& filename,
+  void ReadDescriptorSet(const string& filename,
                          FileDescriptorSet* descriptor_set);
 
  private:
@@ -170,16 +174,16 @@ class CommandLineInterfaceTest : public testing::Test {
   // protection against accidentally deleting user files (since we recursively
   // delete this directory during the test).  This is the full path of that
   // directory.
-  std::string temp_directory_;
+  string temp_directory_;
 
   // The result of Run().
   int return_code_;
 
   // The captured stderr output.
-  std::string error_text_;
+  string error_text_;
 
   // Pointers which need to be deleted later.
-  std::vector<CodeGenerator*> mock_generators_to_delete_;
+  vector<CodeGenerator*> mock_generators_to_delete_;
 
   NullCodeGenerator* null_generator_;
 };
@@ -190,13 +194,13 @@ class CommandLineInterfaceTest::NullCodeGenerator : public CodeGenerator {
   ~NullCodeGenerator() {}
 
   mutable bool called_;
-  mutable std::string parameter_;
+  mutable string parameter_;
 
   // implements CodeGenerator ----------------------------------------
   bool Generate(const FileDescriptor* file,
-                const std::string& parameter,
+                const string& parameter,
                 GeneratorContext* context,
-                std::string* error) const {
+                string* error) const {
     called_ = true;
     parameter_ = parameter;
     return true;
@@ -225,7 +229,7 @@ void CommandLineInterfaceTest::SetUp() {
   // Register generators.
   CodeGenerator* generator = new MockCodeGenerator("test_generator");
   mock_generators_to_delete_.push_back(generator);
-  cli_.RegisterGenerator("--test_out", generator, "Test output.");
+  cli_.RegisterGenerator("--test_out", "--test_opt", generator, "Test output.");
   cli_.RegisterGenerator("-t", generator, "Test output.");
 
   generator = new MockCodeGenerator("alt_generator");
@@ -250,9 +254,9 @@ void CommandLineInterfaceTest::TearDown() {
   mock_generators_to_delete_.clear();
 }
 
-void CommandLineInterfaceTest::Run(const std::string& command) {
-  std::vector<std::string> args;
-  protobuf::SplitStringUsing(command, " ", &args);
+void CommandLineInterfaceTest::Run(const string& command) {
+  vector<string> args;
+  SplitStringUsing(command, " ", &args);
 
   if (!disallow_plugins_) {
     cli_.AllowPlugins("prefix-");
@@ -274,7 +278,7 @@ void CommandLineInterfaceTest::Run(const std::string& command) {
       "test_plugin",            // Unix
     };
 
-    std::string plugin_path;
+    string plugin_path;
 
     for (int i = 0; i < GOOGLE_ARRAYSIZE(possible_paths); i++) {
       if (access(possible_paths[i], F_OK) == 0) {
@@ -294,7 +298,7 @@ void CommandLineInterfaceTest::Run(const std::string& command) {
   scoped_array<const char*> argv(new const char*[args.size()]);
 
   for (int i = 0; i < args.size(); i++) {
-    args[i] = protobuf::StringReplace(args[i], "$tmpdir", temp_directory_, true);
+    args[i] = StringReplace(args[i], "$tmpdir", temp_directory_, true);
     argv[i] = args[i].c_str();
   }
 
@@ -308,21 +312,21 @@ void CommandLineInterfaceTest::Run(const std::string& command) {
 // -------------------------------------------------------------------
 
 void CommandLineInterfaceTest::CreateTempFile(
-    const std::string& name,
-    const std::string& contents) {
+    const string& name,
+    const string& contents) {
   // Create parent directory, if necessary.
-  std::string::size_type slash_pos = name.find_last_of('/');
-  if (slash_pos != std::string::npos) {
-    std::string dir = name.substr(0, slash_pos);
+  string::size_type slash_pos = name.find_last_of('/');
+  if (slash_pos != string::npos) {
+    string dir = name.substr(0, slash_pos);
     File::RecursivelyCreateDir(temp_directory_ + "/" + dir, 0777);
   }
 
   // Write file.
-  std::string full_name = temp_directory_ + "/" + name;
+  string full_name = temp_directory_ + "/" + name;
   File::WriteStringToFileOrDie(contents, full_name);
 }
 
-void CommandLineInterfaceTest::CreateTempDir(const std::string& name) {
+void CommandLineInterfaceTest::CreateTempDir(const string& name) {
   File::RecursivelyCreateDir(temp_directory_ + "/" + name, 0777);
 }
 
@@ -333,50 +337,56 @@ void CommandLineInterfaceTest::ExpectNoErrors() {
   EXPECT_EQ("", error_text_);
 }
 
-void CommandLineInterfaceTest::ExpectErrorText(const std::string& expected_text) {
+void CommandLineInterfaceTest::ExpectErrorText(const string& expected_text) {
   EXPECT_NE(0, return_code_);
-  EXPECT_EQ(protobuf::StringReplace(expected_text, "$tmpdir", temp_directory_, true),
+  EXPECT_EQ(StringReplace(expected_text, "$tmpdir", temp_directory_, true),
             error_text_);
 }
 
 void CommandLineInterfaceTest::ExpectErrorSubstring(
-    const std::string& expected_substring) {
+    const string& expected_substring) {
   EXPECT_NE(0, return_code_);
   EXPECT_PRED_FORMAT2(testing::IsSubstring, expected_substring, error_text_);
 }
 
+void CommandLineInterfaceTest::ExpectErrorSubstringWithZeroReturnCode(
+    const string& expected_substring) {
+  EXPECT_EQ(0, return_code_);
+  EXPECT_PRED_FORMAT2(testing::IsSubstring, expected_substring, error_text_);
+}
+
 bool CommandLineInterfaceTest::HasAlternateErrorSubstring(
-    const std::string& expected_substring) {
+    const string& expected_substring) {
   EXPECT_NE(0, return_code_);
-  return error_text_.find(expected_substring) != std::string::npos;
+  return error_text_.find(expected_substring) != string::npos;
 }
 
 void CommandLineInterfaceTest::ExpectGenerated(
-    const std::string& generator_name,
-    const std::string& parameter,
-    const std::string& proto_name,
-    const std::string& message_name) {
+    const string& generator_name,
+    const string& parameter,
+    const string& proto_name,
+    const string& message_name) {
   MockCodeGenerator::ExpectGenerated(
       generator_name, parameter, "", proto_name, message_name, proto_name,
       temp_directory_);
 }
 
 void CommandLineInterfaceTest::ExpectGenerated(
-    const std::string& generator_name,
-    const std::string& parameter,
-    const std::string& proto_name,
-    const std::string& message_name,
-    const std::string& output_directory) {
+    const string& generator_name,
+    const string& parameter,
+    const string& proto_name,
+    const string& message_name,
+    const string& output_directory) {
   MockCodeGenerator::ExpectGenerated(
       generator_name, parameter, "", proto_name, message_name, proto_name,
       temp_directory_ + "/" + output_directory);
 }
 
 void CommandLineInterfaceTest::ExpectGeneratedWithMultipleInputs(
-    const std::string& generator_name,
-    const std::string& all_proto_names,
-    const std::string& proto_name,
-    const std::string& message_name) {
+    const string& generator_name,
+    const string& all_proto_names,
+    const string& proto_name,
+    const string& message_name) {
   MockCodeGenerator::ExpectGenerated(
       generator_name, "", "", proto_name, message_name,
       all_proto_names,
@@ -384,26 +394,26 @@ void CommandLineInterfaceTest::ExpectGeneratedWithMultipleInputs(
 }
 
 void CommandLineInterfaceTest::ExpectGeneratedWithInsertions(
-    const std::string& generator_name,
-    const std::string& parameter,
-    const std::string& insertions,
-    const std::string& proto_name,
-    const std::string& message_name) {
+    const string& generator_name,
+    const string& parameter,
+    const string& insertions,
+    const string& proto_name,
+    const string& message_name) {
   MockCodeGenerator::ExpectGenerated(
       generator_name, parameter, insertions, proto_name, message_name,
       proto_name, temp_directory_);
 }
 
 void CommandLineInterfaceTest::ExpectNullCodeGeneratorCalled(
-    const std::string& parameter) {
+    const string& parameter) {
   EXPECT_TRUE(null_generator_->called_);
   EXPECT_EQ(parameter, null_generator_->parameter_);
 }
 
 void CommandLineInterfaceTest::ReadDescriptorSet(
-    const std::string& filename, FileDescriptorSet* descriptor_set) {
-  std::string path = temp_directory_ + "/" + filename;
-  std::string file_contents;
+    const string& filename, FileDescriptorSet* descriptor_set) {
+  string path = temp_directory_ + "/" + filename;
+  string file_contents;
   if (!File::ReadFileToString(path, &file_contents)) {
     FAIL() << "File not found: " << path;
   }
@@ -542,6 +552,32 @@ TEST_F(CommandLineInterfaceTest, GeneratorParameters) {
   ExpectNoErrors();
   ExpectGenerated("test_generator", "TestParameter", "foo.proto", "Foo");
   ExpectGenerated("test_plugin", "TestPluginParameter", "foo.proto", "Foo");
+}
+
+TEST_F(CommandLineInterfaceTest, ExtraGeneratorParameters) {
+  // Test that generator parameters specified with the option flag are
+  // correctly passed to the code generator.
+
+  CreateTempFile("foo.proto",
+    "syntax = \"proto2\";\n"
+    "message Foo {}\n");
+  // Create the "a" and "b" sub-directories.
+  CreateTempDir("a");
+  CreateTempDir("b");
+
+  Run("protocol_compiler "
+      "--test_opt=foo1 "
+      "--test_out=bar:$tmpdir/a "
+      "--test_opt=foo2 "
+      "--test_out=baz:$tmpdir/b "
+      "--test_opt=foo3 "
+      "--proto_path=$tmpdir foo.proto");
+
+  ExpectNoErrors();
+  ExpectGenerated(
+      "test_generator", "bar,foo1,foo2,foo3", "foo.proto", "Foo", "a");
+  ExpectGenerated(
+      "test_generator", "baz,foo1,foo2,foo3", "foo.proto", "Foo", "b");
 }
 
 TEST_F(CommandLineInterfaceTest, Insert) {
@@ -779,6 +815,33 @@ TEST_F(CommandLineInterfaceTest, WriteDescriptorSet) {
   if (HasFatalFailure()) return;
   ASSERT_EQ(1, descriptor_set.file_size());
   EXPECT_EQ("bar.proto", descriptor_set.file(0).name());
+  // Descriptor set should not have source code info.
+  EXPECT_FALSE(descriptor_set.file(0).has_source_code_info());
+}
+
+TEST_F(CommandLineInterfaceTest, WriteDescriptorSetWithSourceInfo) {
+  CreateTempFile("foo.proto",
+    "syntax = \"proto2\";\n"
+    "message Foo {}\n");
+  CreateTempFile("bar.proto",
+    "syntax = \"proto2\";\n"
+    "import \"foo.proto\";\n"
+    "message Bar {\n"
+    "  optional Foo foo = 1;\n"
+    "}\n");
+
+  Run("protocol_compiler --descriptor_set_out=$tmpdir/descriptor_set "
+      "--include_source_info --proto_path=$tmpdir bar.proto");
+
+  ExpectNoErrors();
+
+  FileDescriptorSet descriptor_set;
+  ReadDescriptorSet("descriptor_set", &descriptor_set);
+  if (HasFatalFailure()) return;
+  ASSERT_EQ(1, descriptor_set.file_size());
+  EXPECT_EQ("bar.proto", descriptor_set.file(0).name());
+  // Source code info included.
+  EXPECT_TRUE(descriptor_set.file(0).has_source_code_info());
 }
 
 TEST_F(CommandLineInterfaceTest, WriteTransitiveDescriptorSet) {
@@ -807,6 +870,40 @@ TEST_F(CommandLineInterfaceTest, WriteTransitiveDescriptorSet) {
   }
   EXPECT_EQ("foo.proto", descriptor_set.file(0).name());
   EXPECT_EQ("bar.proto", descriptor_set.file(1).name());
+  // Descriptor set should not have source code info.
+  EXPECT_FALSE(descriptor_set.file(0).has_source_code_info());
+  EXPECT_FALSE(descriptor_set.file(1).has_source_code_info());
+}
+
+TEST_F(CommandLineInterfaceTest, WriteTransitiveDescriptorSetWithSourceInfo) {
+  CreateTempFile("foo.proto",
+    "syntax = \"proto2\";\n"
+    "message Foo {}\n");
+  CreateTempFile("bar.proto",
+    "syntax = \"proto2\";\n"
+    "import \"foo.proto\";\n"
+    "message Bar {\n"
+    "  optional Foo foo = 1;\n"
+    "}\n");
+
+  Run("protocol_compiler --descriptor_set_out=$tmpdir/descriptor_set "
+      "--include_imports --include_source_info --proto_path=$tmpdir bar.proto");
+
+  ExpectNoErrors();
+
+  FileDescriptorSet descriptor_set;
+  ReadDescriptorSet("descriptor_set", &descriptor_set);
+  if (HasFatalFailure()) return;
+  ASSERT_EQ(2, descriptor_set.file_size());
+  if (descriptor_set.file(0).name() == "bar.proto") {
+    std::swap(descriptor_set.mutable_file()->mutable_data()[0],
+              descriptor_set.mutable_file()->mutable_data()[1]);
+  }
+  EXPECT_EQ("foo.proto", descriptor_set.file(0).name());
+  EXPECT_EQ("bar.proto", descriptor_set.file(1).name());
+  // Source code info included.
+  EXPECT_TRUE(descriptor_set.file(0).has_source_code_info());
+  EXPECT_TRUE(descriptor_set.file(1).has_source_code_info());
 }
 
 // -------------------------------------------------------------------
@@ -976,7 +1073,7 @@ TEST_F(CommandLineInterfaceTest, OutputWriteError) {
     "syntax = \"proto2\";\n"
     "message Foo {}\n");
 
-  std::string output_file =
+  string output_file =
       MockCodeGenerator::GetOutputFileName("test_generator", "foo.proto");
 
   // Create a directory blocking our output location.
@@ -1005,7 +1102,7 @@ TEST_F(CommandLineInterfaceTest, PluginOutputWriteError) {
     "syntax = \"proto2\";\n"
     "message Foo {}\n");
 
-  std::string output_file =
+  string output_file =
       MockCodeGenerator::GetOutputFileName("test_plugin", "foo.proto");
 
   // Create a directory blocking our output location.
@@ -1129,6 +1226,17 @@ TEST_F(CommandLineInterfaceTest, GeneratorPluginCrash) {
 #endif
 }
 
+TEST_F(CommandLineInterfaceTest, PluginReceivesSourceCodeInfo) {
+  CreateTempFile("foo.proto",
+    "syntax = \"proto2\";\n"
+    "message MockCodeGenerator_HasSourceCodeInfo {}\n");
+
+  Run("protocol_compiler --plug_out=$tmpdir --proto_path=$tmpdir foo.proto");
+
+  ExpectErrorSubstring(
+      "Saw message type MockCodeGenerator_HasSourceCodeInfo: 1.");
+}
+
 TEST_F(CommandLineInterfaceTest, GeneratorPluginNotFound) {
   // Test what happens if the plugin isn't found.
 
@@ -1171,11 +1279,11 @@ TEST_F(CommandLineInterfaceTest, GeneratorPluginNotAllowed) {
 TEST_F(CommandLineInterfaceTest, HelpText) {
   Run("test_exec_name --help");
 
-  ExpectErrorSubstring("Usage: test_exec_name ");
-  ExpectErrorSubstring("--test_out=OUT_DIR");
-  ExpectErrorSubstring("Test output.");
-  ExpectErrorSubstring("--alt_out=OUT_DIR");
-  ExpectErrorSubstring("Alt output.");
+  ExpectErrorSubstringWithZeroReturnCode("Usage: test_exec_name ");
+  ExpectErrorSubstringWithZeroReturnCode("--test_out=OUT_DIR");
+  ExpectErrorSubstringWithZeroReturnCode("Test output.");
+  ExpectErrorSubstringWithZeroReturnCode("--alt_out=OUT_DIR");
+  ExpectErrorSubstringWithZeroReturnCode("Alt output.");
 }
 
 TEST_F(CommandLineInterfaceTest, GccFormatErrors) {
@@ -1302,13 +1410,13 @@ class EncodeDecodeTest : public testing::Test {
     close(duped_stdin_);
   }
 
-  void RedirectStdinFromText(const std::string& input) {
-    std::string filename = TestTempDir() + "/test_stdin";
+  void RedirectStdinFromText(const string& input) {
+    string filename = TestTempDir() + "/test_stdin";
     File::WriteStringToFileOrDie(input, filename);
     GOOGLE_CHECK(RedirectStdinFromFile(filename));
   }
 
-  bool RedirectStdinFromFile(const std::string& filename) {
+  bool RedirectStdinFromFile(const string& filename) {
     int fd = open(filename.c_str(), O_RDONLY);
     if (fd < 0) return false;
     dup2(fd, STDIN_FILENO);
@@ -1317,8 +1425,8 @@ class EncodeDecodeTest : public testing::Test {
   }
 
   // Remove '\r' characters from text.
-  std::string StripCR(const std::string& text) {
-    std::string result;
+  string StripCR(const string& text) {
+    string result;
 
     for (int i = 0; i < text.size(); i++) {
       if (text[i] != '\r') {
@@ -1332,10 +1440,10 @@ class EncodeDecodeTest : public testing::Test {
   enum Type { TEXT, BINARY };
   enum ReturnCode { SUCCESS, ERROR };
 
-  bool Run(const std::string& command) {
-    std::vector<std::string> args;
+  bool Run(const string& command) {
+    vector<string> args;
     args.push_back("protoc");
-    protobuf::SplitStringUsing(command, " ", &args);
+    SplitStringUsing(command, " ", &args);
     args.push_back("--proto_path=" + TestSourceDir());
 
     scoped_array<const char*> argv(new const char*[args.size()]);
@@ -1357,8 +1465,8 @@ class EncodeDecodeTest : public testing::Test {
     return result == 0;
   }
 
-  void ExpectStdoutMatchesBinaryFile(const std::string& filename) {
-    std::string expected_output;
+  void ExpectStdoutMatchesBinaryFile(const string& filename) {
+    string expected_output;
     ASSERT_TRUE(File::ReadFileToString(filename, &expected_output));
 
     // Don't use EXPECT_EQ because we don't want to print raw binary data to
@@ -1366,25 +1474,25 @@ class EncodeDecodeTest : public testing::Test {
     EXPECT_TRUE(captured_stdout_ == expected_output);
   }
 
-  void ExpectStdoutMatchesTextFile(const std::string& filename) {
-    std::string expected_output;
+  void ExpectStdoutMatchesTextFile(const string& filename) {
+    string expected_output;
     ASSERT_TRUE(File::ReadFileToString(filename, &expected_output));
 
     ExpectStdoutMatchesText(expected_output);
   }
 
-  void ExpectStdoutMatchesText(const std::string& expected_text) {
+  void ExpectStdoutMatchesText(const string& expected_text) {
     EXPECT_EQ(StripCR(expected_text), StripCR(captured_stdout_));
   }
 
-  void ExpectStderrMatchesText(const std::string& expected_text) {
+  void ExpectStderrMatchesText(const string& expected_text) {
     EXPECT_EQ(StripCR(expected_text), StripCR(captured_stderr_));
   }
 
  private:
   int duped_stdin_;
-  std::string captured_stdout_;
-  std::string captured_stderr_;
+  string captured_stdout_;
+  string captured_stderr_;
 };
 
 TEST_F(EncodeDecodeTest, Encode) {
@@ -1420,7 +1528,7 @@ TEST_F(EncodeDecodeTest, DecodeRaw) {
   protobuf_unittest::TestAllTypes message;
   message.set_optional_int32(123);
   message.set_optional_string("foo");
-  std::string data;
+  string data;
   message.SerializeToString(&data);
 
   RedirectStdinFromText(data);

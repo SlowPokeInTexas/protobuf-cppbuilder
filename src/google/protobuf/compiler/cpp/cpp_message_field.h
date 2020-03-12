@@ -46,7 +46,8 @@ namespace cpp {
 
 class MessageFieldGenerator : public FieldGenerator {
  public:
-  explicit MessageFieldGenerator(const FieldDescriptor* descriptor);
+  explicit MessageFieldGenerator(const FieldDescriptor* descriptor,
+                                 const Options& options);
   ~MessageFieldGenerator();
 
   // implements FieldGenerator ---------------------------------------
@@ -64,14 +65,15 @@ class MessageFieldGenerator : public FieldGenerator {
 
  private:
   const FieldDescriptor* descriptor_;
-  std::map<std::string, std::string> variables_;
+  map<string, string> variables_;
 
   GOOGLE_DISALLOW_EVIL_CONSTRUCTORS(MessageFieldGenerator);
 };
 
 class RepeatedMessageFieldGenerator : public FieldGenerator {
  public:
-  explicit RepeatedMessageFieldGenerator(const FieldDescriptor* descriptor);
+  explicit RepeatedMessageFieldGenerator(const FieldDescriptor* descriptor,
+                                         const Options& options);
   ~RepeatedMessageFieldGenerator();
 
   // implements FieldGenerator ---------------------------------------
@@ -89,7 +91,7 @@ class RepeatedMessageFieldGenerator : public FieldGenerator {
 
  private:
   const FieldDescriptor* descriptor_;
-  std::map<std::string, std::string> variables_;
+  map<string, string> variables_;
 
   GOOGLE_DISALLOW_EVIL_CONSTRUCTORS(RepeatedMessageFieldGenerator);
 };

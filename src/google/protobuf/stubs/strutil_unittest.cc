@@ -46,7 +46,7 @@ TEST(StringUtilityTest, ImmuneToLocales) {
   // Remember the old locale.
   char* old_locale_cstr = setlocale(LC_NUMERIC, NULL);
   ASSERT_TRUE(old_locale_cstr != NULL);
-  std::string old_locale = old_locale_cstr;
+  string old_locale = old_locale_cstr;
 
   // Set the locale to "C".
   ASSERT_TRUE(setlocale(LC_NUMERIC, "C") != NULL);

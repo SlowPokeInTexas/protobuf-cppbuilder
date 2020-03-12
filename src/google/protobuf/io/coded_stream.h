@@ -110,7 +110,12 @@
 #define GOOGLE_PROTOBUF_IO_CODED_STREAM_H__
 
 #include <string>
-#if defined(_MSC_VER) || defined(__BORLANDC__)
+#if defined(__BORLANDC__)
+  #if defined(_M_IX86) && \
+      !defined(PROTOBUF_DISABLE_LITTLE_ENDIAN_OPT_FOR_TEST)
+    #define PROTOBUF_LITTLE_ENDIAN 1
+  #endif
+#elif defined(_MSC_VER)
   #if defined(_M_IX86) && \
       !defined(PROTOBUF_DISABLE_LITTLE_ENDIAN_OPT_FOR_TEST)
     #define PROTOBUF_LITTLE_ENDIAN 1
@@ -170,6 +175,9 @@ class LIBPROTOBUF_EXPORT CodedInputStream {
   // successfully and the stream's byte limit.
   ~CodedInputStream();
 
+  // Return true if this CodedInputStream reads from a flat array instead of
+  // a ZeroCopyInputStream.
+  inline bool IsFlat() const;
 
   // Skips a number of bytes.  Returns false if an underlying read error
   // occurs.
@@ -199,10 +207,10 @@ class LIBPROTOBUF_EXPORT CodedInputStream {
   // upfront.  This prevents denial-of-service attacks in which a client
   // could claim that a string is going to be MAX_INT bytes long in order to
   // crash the server because it can't allocate this much space at once.
-  bool ReadString(std::string* buffer, int size);
+  bool ReadString(string* buffer, int size);
   // Like the above, with inlined optimizations. This should only be used
   // by the protobuf implementation.
-  inline bool InternalReadStringInline(std::string* buffer,
+  inline bool InternalReadStringInline(string* buffer,
                                        int size) GOOGLE_ATTRIBUTE_ALWAYS_INLINE;
 
 
@@ -311,7 +319,10 @@ class LIBPROTOBUF_EXPORT CodedInputStream {
 
   // Returns the number of bytes left until the nearest limit on the
   // stack is hit, or -1 if no limits are in place.
-  int BytesUntilLimit();
+  int BytesUntilLimit() const;
+
+  // Returns current position relative to the beginning of the input stream.
+  int CurrentPosition() const;
 
   // Total Bytes Limit -----------------------------------------------
   // To prevent malicious users from sending excessively large messages
@@ -327,8 +338,9 @@ class LIBPROTOBUF_EXPORT CodedInputStream {
   // cause integer overflows is 512MB.  The default limit is 64MB.  Apps
   // should set shorter limits if possible.  If warning_threshold is not -1,
   // a warning will be printed to stderr after warning_threshold bytes are
-  // read.  An error will always be printed to stderr if the limit is
-  // reached.
+  // read.  For backwards compatibility all negative values get squached to -1,
+  // as other negative values might have special internal meanings.
+  // An error will always be printed to stderr if the limit is reached.
   //
   // This is unrelated to PushLimit()/PopLimit().
   //
@@ -355,8 +367,9 @@ class LIBPROTOBUF_EXPORT CodedInputStream {
   // messages and groups.  CodedInputStream keeps track of this because it
   // is the only object that is passed down the stack during parsing.
 
-  // Sets the maximum recursion depth.  The default is 64.
+  // Sets the maximum recursion depth.  The default is 100.
   void SetRecursionLimit(int limit);
+
 
   // Increments the current recursion depth.  Returns true if the depth is
   // under the limit, false if it has gone over.
@@ -433,7 +446,8 @@ class LIBPROTOBUF_EXPORT CodedInputStream {
   //
   // Note that this feature is ignored when parsing "lite" messages as they do
   // not have descriptors.
-  void SetExtensionRegistry(DescriptorPool* pool, MessageFactory* factory);
+  void SetExtensionRegistry(const DescriptorPool* pool,
+                            MessageFactory* factory);
 
   // Get the DescriptorPool set via SetExtensionRegistry(), or NULL if no pool
   // has been provided.
@@ -482,6 +496,11 @@ class LIBPROTOBUF_EXPORT CodedInputStream {
   // Maximum number of bytes to read, period.  This is unrelated to
   // current_limit_.  Set using SetTotalBytesLimit().
   int total_bytes_limit_;
+
+  // If positive/0: Limit for bytes read after which a warning due to size
+  // should be logged.
+  // If -1: Printing of warning disabled. Can be set by client.
+  // If -2: Internal: Limit has been reached, print full size when destructing.
   int total_bytes_warning_threshold_;
 
   // Current recursion depth, controlled by IncrementRecursionDepth() and
@@ -531,7 +550,7 @@ class LIBPROTOBUF_EXPORT CodedInputStream {
   // stream.
   uint32 ReadTagFallback();
   uint32 ReadTagSlow();
-  bool ReadStringFallback(std::string* buffer, int size);
+  bool ReadStringFallback(string* buffer, int size);
 
   // Return the size of the buffer.
   int BufferSize() const;
@@ -539,7 +558,8 @@ class LIBPROTOBUF_EXPORT CodedInputStream {
   static const int kDefaultTotalBytesLimit = 64 << 20;  // 64MB
 
   static const int kDefaultTotalBytesWarningThreshold = 32 << 20;  // 32MB
-  static const int kDefaultRecursionLimit = 64;
+
+  static int default_recursion_limit_;  // 100 by default.
 };
 
 // Class which encodes and writes binary data which is composed of varint-
@@ -631,9 +651,9 @@ class LIBPROTOBUF_EXPORT CodedOutputStream {
   static uint8* WriteRawToArray(const void* buffer, int size, uint8* target);
 
   // Equivalent to WriteRaw(str.data(), str.size()).
-  void WriteString(const std::string& str);
+  void WriteString(const string& str);
   // Like WriteString()  but writing directly to the target array.
-  static uint8* WriteStringToArray(const std::string& str, uint8* target);
+  static uint8* WriteStringToArray(const string& str, uint8* target);
 
 
   // Write a 32-bit little-endian integer.
@@ -679,6 +699,21 @@ class LIBPROTOBUF_EXPORT CodedOutputStream {
 
   // If negative, 10 bytes.  Otheriwse, same as VarintSize32().
   static int VarintSize32SignExtended(int32 value);
+
+  // Compile-time equivalent of VarintSize32().
+  template <uint32 Value>
+  struct StaticVarintSize32 {
+    static const int value =
+        (Value < (1 << 7))
+            ? 1
+            : (Value < (1 << 14))
+                ? 2
+                : (Value < (1 << 21))
+                    ? 3
+                    : (Value < (1 << 28))
+                        ? 4
+                        : 5;
+  };
 
   // Returns the total number of bytes written since this object was created.
   inline int ByteCount() const;
@@ -876,13 +911,19 @@ inline bool CodedInputStream::ExpectAtEnd() {
   // If we are at a limit we know no more bytes can be read.  Otherwise, it's
   // hard to say without calling Refresh(), and we'd rather not do that.
 
-  if (buffer_ == buffer_end_ && buffer_size_after_limit_ != 0) {
+  if (buffer_ == buffer_end_ &&
+      ((buffer_size_after_limit_ != 0) ||
+       (total_bytes_read_ == current_limit_))) {
     last_tag_ = 0;                   // Pretend we called ReadTag()...
     legitimate_message_end_ = true;  // ... and it hit EOF.
     return true;
   } else {
     return false;
   }
+}
+
+inline int CodedInputStream::CurrentPosition() const {
+  return total_bytes_read_ - (BufferSize() + buffer_size_after_limit_);
 }
 
 inline uint8* CodedOutputStream::GetDirectBufferForNBytesAndAdvance(int size) {
@@ -989,12 +1030,12 @@ inline int CodedOutputStream::VarintSize32SignExtended(int32 value) {
   }
 }
 
-inline void CodedOutputStream::WriteString(const std::string& str) {
+inline void CodedOutputStream::WriteString(const string& str) {
   WriteRaw(str.data(), static_cast<int>(str.size()));
 }
 
 inline uint8* CodedOutputStream::WriteStringToArray(
-    const std::string& str, uint8* target) {
+    const string& str, uint8* target) {
   return WriteRawToArray(str.data(), static_cast<int>(str.size()), target);
 }
 
@@ -1024,7 +1065,7 @@ inline void CodedInputStream::DecrementRecursionDepth() {
   if (recursion_depth_ > 0) --recursion_depth_;
 }
 
-inline void CodedInputStream::SetExtensionRegistry(DescriptorPool* pool,
+inline void CodedInputStream::SetExtensionRegistry(const DescriptorPool* pool,
                                                    MessageFactory* factory) {
   extension_pool_ = pool;
   extension_factory_ = factory;
@@ -1056,7 +1097,7 @@ inline CodedInputStream::CodedInputStream(ZeroCopyInputStream* input)
     total_bytes_limit_(kDefaultTotalBytesLimit),
     total_bytes_warning_threshold_(kDefaultTotalBytesWarningThreshold),
     recursion_depth_(0),
-    recursion_limit_(kDefaultRecursionLimit),
+    recursion_limit_(default_recursion_limit_),
     extension_pool_(NULL),
     extension_factory_(NULL) {
   // Eagerly Refresh() so buffer space is immediately available.
@@ -1077,17 +1118,15 @@ inline CodedInputStream::CodedInputStream(const uint8* buffer, int size)
     total_bytes_limit_(kDefaultTotalBytesLimit),
     total_bytes_warning_threshold_(kDefaultTotalBytesWarningThreshold),
     recursion_depth_(0),
-    recursion_limit_(kDefaultRecursionLimit),
+    recursion_limit_(default_recursion_limit_),
     extension_pool_(NULL),
     extension_factory_(NULL) {
   // Note that setting current_limit_ == size is important to prevent some
   // code paths from trying to access input_ and segfaulting.
 }
 
-inline CodedInputStream::~CodedInputStream() {
-  if (input_ != NULL) {
-    BackUpInputToCurrentPosition();
-  }
+inline bool CodedInputStream::IsFlat() const {
+  return input_ == NULL;
 }
 
 }  // namespace io

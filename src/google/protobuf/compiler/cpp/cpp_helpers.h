@@ -35,12 +35,18 @@
 #ifndef GOOGLE_PROTOBUF_COMPILER_CPP_HELPERS_H__
 #define GOOGLE_PROTOBUF_COMPILER_CPP_HELPERS_H__
 
+#include <map>
 #include <string>
 #include <google/protobuf/descriptor.h>
 #include <google/protobuf/descriptor.pb.h>
 
 namespace google {
 namespace protobuf {
+
+namespace io {
+class Printer;
+}
+
 namespace compiler {
 namespace cpp {
 
@@ -57,20 +63,20 @@ extern const char kThinSeparator[];
 //   ::foo::bar::Baz_Qux
 // While the non-qualified version would be:
 //   Baz_Qux
-std::string ClassName(const Descriptor* descriptor, bool qualified);
-std::string ClassName(const EnumDescriptor* enum_descriptor, bool qualified);
+string ClassName(const Descriptor* descriptor, bool qualified);
+string ClassName(const EnumDescriptor* enum_descriptor, bool qualified);
 
-std::string SuperClassName(const Descriptor* descriptor);
+string SuperClassName(const Descriptor* descriptor);
 
 // Get the (unqualified) name that should be used for this field in C++ code.
 // The name is coerced to lower-case to emulate proto1 behavior.  People
 // should be using lowercase-with-underscores style for proto field names
 // anyway, so normally this just returns field->name().
-std::string FieldName(const FieldDescriptor* field);
+string FieldName(const FieldDescriptor* field);
 
 // Get the unqualified name that should be used for a field's field
 // number constant.
-std::string FieldConstantName(const FieldDescriptor *field);
+string FieldConstantName(const FieldDescriptor *field);
 
 // Returns the scope where the field was defined (for extensions, this is
 // different from the message type to which the field applies).
@@ -81,10 +87,10 @@ inline const Descriptor* FieldScope(const FieldDescriptor* field) {
 
 // Returns the fully-qualified type name field->message_type().  Usually this
 // is just ClassName(field->message_type(), true);
-std::string FieldMessageTypeName(const FieldDescriptor* field);
+string FieldMessageTypeName(const FieldDescriptor* field);
 
 // Strips ".proto" or ".protodevel" from the end of a filename.
-std::string StripProto(const std::string& filename);
+string StripProto(const string& filename);
 
 // Get the C++ type name for a primitive type (e.g. "double", "::google::protobuf::int32", etc.).
 // Note:  non-built-in type names will be qualified, meaning they will start
@@ -98,41 +104,45 @@ const char* PrimitiveTypeName(FieldDescriptor::CppType type);
 const char* DeclaredTypeMethodName(FieldDescriptor::Type type);
 
 // Get code that evaluates to the field's default value.
-std::string DefaultValue(const FieldDescriptor* field);
+string DefaultValue(const FieldDescriptor* field);
 
 // Convert a file name into a valid identifier.
-std::string FilenameIdentifier(const std::string& filename);
+string FilenameIdentifier(const string& filename);
 
 // Return the name of the AddDescriptors() function for a given file.
-std::string GlobalAddDescriptorsName(const std::string& filename);
+string GlobalAddDescriptorsName(const string& filename);
 
 // Return the name of the AssignDescriptors() function for a given file.
-std::string GlobalAssignDescriptorsName(const std::string& filename);
+string GlobalAssignDescriptorsName(const string& filename);
 
 // Return the name of the ShutdownFile() function for a given file.
-std::string GlobalShutdownFileName(const std::string& filename);
+string GlobalShutdownFileName(const string& filename);
 
 // Escape C++ trigraphs by escaping question marks to \?
-std::string EscapeTrigraphs(const std::string& to_escape);
+string EscapeTrigraphs(const string& to_escape);
 
 // Do message classes in this file keep track of unknown fields?
-inline bool HasUnknownFields(const FileDescriptor *file) {
+inline bool HasUnknownFields(const FileDescriptor* file) {
   return file->options().optimize_for() != FileOptions::LITE_RUNTIME;
 }
 
+
+// Does this file have any enum type definitions?
+bool HasEnumDefinitions(const FileDescriptor* file);
+
 // Does this file have generated parsing, serialization, and other
 // standard methods for which reflection-based fallback implementations exist?
-inline bool HasGeneratedMethods(const FileDescriptor *file) {
+inline bool HasGeneratedMethods(const FileDescriptor* file) {
   return file->options().optimize_for() != FileOptions::CODE_SIZE;
 }
 
-// Do message classes in this file have descriptor and refelction methods?
-inline bool HasDescriptorMethods(const FileDescriptor *file) {
+// Do message classes in this file have descriptor and reflection methods?
+inline bool HasDescriptorMethods(const FileDescriptor* file) {
   return file->options().optimize_for() != FileOptions::LITE_RUNTIME;
 }
 
 // Should we generate generic services for this file?
-inline bool HasGenericServices(const FileDescriptor *file) {
+inline bool HasGenericServices(const FileDescriptor* file) {
   return file->service_count() > 0 &&
          file->options().optimize_for() != FileOptions::LITE_RUNTIME &&
          file->options().cc_generic_services();
@@ -149,6 +159,23 @@ inline bool HasUtf8Verification(const FileDescriptor* file) {
 inline bool HasFastArraySerialization(const FileDescriptor* file) {
   return file->options().optimize_for() == FileOptions::SPEED;
 }
+
+// Returns whether we have to generate code with static initializers.
+bool StaticInitializersForced(const FileDescriptor* file);
+
+// Prints 'with_static_init' if static initializers have to be used for the
+// provided file. Otherwise emits both 'with_static_init' and
+// 'without_static_init' using #ifdef.
+void PrintHandlingOptionalStaticInitializers(
+    const FileDescriptor* file, io::Printer* printer,
+    const char* with_static_init, const char* without_static_init,
+    const char* var1 = NULL, const string& val1 = "",
+    const char* var2 = NULL, const string& val2 = "");
+
+void PrintHandlingOptionalStaticInitializers(
+    const map<string, string>& vars, const FileDescriptor* file,
+    io::Printer* printer, const char* with_static_init,
+    const char* without_static_init);
 
 
 }  // namespace cpp

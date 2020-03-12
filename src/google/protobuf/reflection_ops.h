@@ -38,6 +38,7 @@
 #ifndef GOOGLE_PROTOBUF_REFLECTION_OPS_H__
 #define GOOGLE_PROTOBUF_REFLECTION_OPS_H__
 
+#include <google/protobuf/stubs/common.h>
 #include <google/protobuf/message.h>
 
 namespace google {
@@ -65,8 +66,8 @@ class LIBPROTOBUF_EXPORT ReflectionOps {
   // paths (e.g. "foo.bar[5].baz") to *names.  "prefix" will be attached to
   // the front of each name.
   static void FindInitializationErrors(const Message& message,
-                                       const std::string& prefix,
-                                       std::vector<std::string>* errors);
+                                       const string& prefix,
+                                       vector<string>* errors);
 
  private:
   // All methods are static.  No need to construct.

@@ -66,6 +66,7 @@ class FieldGenerator {
   virtual void GenerateBuildingCode(io::Printer* printer) const = 0;
   virtual void GenerateParsingCode(io::Printer* printer) const = 0;
   virtual void GenerateParsingCodeFromPacked(io::Printer* printer) const;
+  virtual void GenerateParsingDoneCode(io::Printer* printer) const = 0;
   virtual void GenerateSerializationCode(io::Printer* printer) const = 0;
   virtual void GenerateSerializedSizeCode(io::Printer* printer) const = 0;
   virtual void GenerateFieldBuilderInitializationCode(io::Printer* printer)
@@ -74,7 +75,7 @@ class FieldGenerator {
   virtual void GenerateEqualsCode(io::Printer* printer) const = 0;
   virtual void GenerateHashCode(io::Printer* printer) const = 0;
 
-  virtual std::string GetBoxedType() const = 0;
+  virtual string GetBoxedType() const = 0;
 
  private:
   GOOGLE_DISALLOW_EVIL_CONSTRUCTORS(FieldGenerator);

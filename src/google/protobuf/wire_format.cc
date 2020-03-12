@@ -48,11 +48,10 @@
 #include <google/protobuf/unknown_field_set.h>
 
 
+
 namespace google {
 namespace protobuf {
 namespace internal {
-
-using internal::WireFormatLite;
 
 namespace {
 
@@ -239,8 +238,6 @@ void WireFormat::SerializeUnknownMessageSetItems(
     // The only unknown fields that are allowed to exist in a MessageSet are
     // messages, which are length-delimited.
     if (field.type() == UnknownField::TYPE_LENGTH_DELIMITED) {
-      const std::string& data = field.length_delimited();
-
       // Start group.
       output->WriteVarint32(WireFormatLite::kMessageSetItemStartTag);
 
@@ -250,8 +247,7 @@ void WireFormat::SerializeUnknownMessageSetItems(
 
       // Write message.
       output->WriteVarint32(WireFormatLite::kMessageSetMessageTag);
-      output->WriteVarint32(data.size());
-      output->WriteString(data);
+      field.SerializeLengthDelimitedNoTag(output);
 
       // End group.
       output->WriteVarint32(WireFormatLite::kMessageSetItemEndTag);
@@ -268,8 +264,6 @@ uint8* WireFormat::SerializeUnknownMessageSetItemsToArray(
     // The only unknown fields that are allowed to exist in a MessageSet are
     // messages, which are length-delimited.
     if (field.type() == UnknownField::TYPE_LENGTH_DELIMITED) {
-      const std::string& data = field.length_delimited();
-
       // Start group.
       target = io::CodedOutputStream::WriteTagToArray(
           WireFormatLite::kMessageSetItemStartTag, target);
@@ -283,8 +277,7 @@ uint8* WireFormat::SerializeUnknownMessageSetItemsToArray(
       // Write message.
       target = io::CodedOutputStream::WriteTagToArray(
           WireFormatLite::kMessageSetMessageTag, target);
-      target = io::CodedOutputStream::WriteVarint32ToArray(data.size(), target);
-      target = io::CodedOutputStream::WriteStringToArray(data, target);
+      target = field.SerializeLengthDelimitedNoTagToArray(target);
 
       // End group.
       target = io::CodedOutputStream::WriteTagToArray(
@@ -354,9 +347,10 @@ int WireFormat::ComputeUnknownMessageSetItemsSize(
     if (field.type() == UnknownField::TYPE_LENGTH_DELIMITED) {
       size += WireFormatLite::kMessageSetItemTagsSize;
       size += io::CodedOutputStream::VarintSize32(field.number());
-      size += io::CodedOutputStream::VarintSize32(
-        field.length_delimited().size());
-      size += field.length_delimited().size();
+
+      int field_size = field.GetLengthDelimitedSize();
+      size += io::CodedOutputStream::VarintSize32(field_size);
+      size += field_size;
     }
   }
 
@@ -566,7 +560,7 @@ bool WireFormat::ParseAndMergeField(
 
       // Handle strings separately so that we can optimize the ctype=CORD case.
       case FieldDescriptor::TYPE_STRING: {
-        std::string value;
+        string value;
         if (!WireFormatLite::ReadString(input, &value)) return false;
         VerifyUTF8String(value.data(), value.length(), PARSE);
         if (field->is_repeated()) {
@@ -578,7 +572,7 @@ bool WireFormat::ParseAndMergeField(
       }
 
       case FieldDescriptor::TYPE_BYTES: {
-        std::string value;
+        string value;
         if (!WireFormatLite::ReadBytes(input, &value)) return false;
         if (field->is_repeated()) {
           message_reflection->AddString(message, field, value);
@@ -642,11 +636,8 @@ bool WireFormat::ParseAndMergeMessageSetItem(
   const FieldDescriptor* field = NULL;
 
   // If we see message data before the type_id, we'll append it to this so
-  // we can parse it later.  This will probably never happen in practice,
-  // as no MessageSet encoder I know of writes the message before the type ID.
-  // But, it's technically valid so we should allow it.
-  // TODO(kenton):  Use a Cord instead?  Do I care?
-  std::string message_data;
+  // we can parse it later.
+  string message_data;
 
   while (true) {
     uint32 tag = input->ReadTag();
@@ -679,11 +670,14 @@ bool WireFormat::ParseAndMergeMessageSetItem(
       case WireFormatLite::kMessageSetMessageTag: {
         if (fake_tag == 0) {
           // We haven't seen a type_id yet.  Append this data to message_data.
-          std::string temp;
+          string temp;
           uint32 length;
           if (!input->ReadVarint32(&length)) return false;
           if (!input->ReadString(&temp, length)) return false;
-          message_data.append(temp);
+          io::StringOutputStream output_stream(&message_data);
+          io::CodedOutputStream coded_output(&output_stream);
+          coded_output.WriteVarint32(length);
+          coded_output.WriteString(temp);
         } else {
           // Already saw type_id, so we can parse this directly.
           if (!ParseAndMergeField(fake_tag, field, message, input)) {
@@ -714,7 +708,7 @@ void WireFormat::SerializeWithCachedSizes(
   const Reflection* message_reflection = message.GetReflection();
   int expected_endpoint = output->ByteCount() + size;
 
-  std::vector<const FieldDescriptor*> fields;
+  vector<const FieldDescriptor*> fields;
   message_reflection->ListFields(message, &fields);
   for (int i = 0; i < fields.size(); i++) {
     SerializeFieldWithCachedSizes(fields[i], message, output);
@@ -829,8 +823,8 @@ void WireFormat::SerializeFieldWithCachedSizes(
       // Handle strings separately so that we can get string references
       // instead of copying.
       case FieldDescriptor::TYPE_STRING: {
-        std::string scratch;
-        const std::string& value = field->is_repeated() ?
+        string scratch;
+        const string& value = field->is_repeated() ?
           message_reflection->GetRepeatedStringReference(
             message, field, j, &scratch) :
           message_reflection->GetStringReference(message, field, &scratch);
@@ -840,8 +834,8 @@ void WireFormat::SerializeFieldWithCachedSizes(
       }
 
       case FieldDescriptor::TYPE_BYTES: {
-        std::string scratch;
-        const std::string& value = field->is_repeated() ?
+        string scratch;
+        const string& value = field->is_repeated() ?
           message_reflection->GetRepeatedStringReference(
             message, field, j, &scratch) :
           message_reflection->GetStringReference(message, field, &scratch);
@@ -884,7 +878,7 @@ int WireFormat::ByteSize(const Message& message) {
 
   int our_size = 0;
 
-  std::vector<const FieldDescriptor*> fields;
+  vector<const FieldDescriptor*> fields;
   message_reflection->ListFields(message, &fields);
   for (int i = 0; i < fields.size(); i++) {
     our_size += FieldByteSize(fields[i], message);
@@ -1009,8 +1003,8 @@ int WireFormat::FieldDataOnlyByteSize(
     case FieldDescriptor::TYPE_STRING:
     case FieldDescriptor::TYPE_BYTES: {
       for (int j = 0; j < count; j++) {
-        std::string scratch;
-        const std::string& value = field->is_repeated() ?
+        string scratch;
+        const string& value = field->is_repeated() ?
           message_reflection->GetRepeatedStringReference(
             message, field, j, &scratch) :
           message_reflection->GetStringReference(message, field, &scratch);
@@ -1056,10 +1050,10 @@ void WireFormat::VerifyUTF8StringFallback(const char* data,
         break;
       // no default case: have the compiler warn if a case is not covered.
     }
-    GOOGLE_LOG(ERROR) << "Encountered string containing invalid UTF-8 data while "
+    GOOGLE_LOG(ERROR) << "String field contains invalid UTF-8 data when "
                << operation_str
-               << " protocol buffer. Strings must contain only UTF-8; "
-                  "use the 'bytes' type for raw bytes.";
+               << " a protocol buffer. Use the 'bytes' type if you intend to "
+                  "send raw bytes.";
   }
 }
 

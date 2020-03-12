@@ -44,7 +44,6 @@
 #include <google/protobuf/testing/googletest.h>
 #include <gtest/gtest.h>
 #include <google/protobuf/io/zero_copy_stream_impl.h>
-#include <google/protobuf/stubs/strutil.h>
 
 
 // This declares an unsigned long long integer literal in a portable way.
@@ -125,6 +124,13 @@ namespace {
 
 class CodedStreamTest : public testing::Test {
  protected:
+  // Helper method used by tests for bytes warning. See implementation comment
+  // for further information.
+  static void SetupTotalBytesLimitWarningTest(
+      int total_bytes_limit, int warning_threshold,
+      vector<string>* out_errors, vector<string>* out_warnings);
+
+  // Buffer used during most of the tests. This assumes tests run sequentially.
   static const int kBufferSize = 1024 * 64;
   static uint8 buffer_[kBufferSize];
 };
@@ -495,11 +501,11 @@ struct Fixed64Case {
 };
 
 inline std::ostream& operator<<(std::ostream& os, const Fixed32Case& c) {
-  return os << "0x" << std::hex << c.value << std::dec;
+  return os << "0x" << hex << c.value << dec;
 }
 
 inline std::ostream& operator<<(std::ostream& os, const Fixed64Case& c) {
-  return os << "0x" << std::hex << c.value << std::dec;
+  return os << "0x" << hex << c.value << dec;
 }
 
 Fixed32Case kFixed32Cases[] = {
@@ -639,7 +645,7 @@ TEST_1D(CodedStreamTest, ReadString, kBlockSizes) {
   {
     CodedInputStream coded_input(&input);
 
-    std::string str;
+    string str;
     EXPECT_TRUE(coded_input.ReadString(&str, strlen(kRawBytes)));
     EXPECT_EQ(kRawBytes, str);
   }
@@ -654,7 +660,7 @@ TEST_1D(CodedStreamTest, ReadStringImpossiblyLarge, kBlockSizes) {
   {
     CodedInputStream coded_input(&input);
 
-    std::string str;
+    string str;
     // Try to read a gigabyte.
     EXPECT_FALSE(coded_input.ReadString(&str, 1 << 30));
   }
@@ -665,14 +671,14 @@ TEST_F(CodedStreamTest, ReadStringImpossiblyLargeFromStringOnStack) {
   // crashes while the above did not.
   uint8 buffer[8];
   CodedInputStream coded_input(buffer, 8);
-  std::string str;
+  string str;
   EXPECT_FALSE(coded_input.ReadString(&str, 1 << 30));
 }
 
 TEST_F(CodedStreamTest, ReadStringImpossiblyLargeFromStringOnHeap) {
   scoped_array<uint8> buffer(new uint8[8]);
   CodedInputStream coded_input(buffer.get(), 8);
-  std::string str;
+  string str;
   EXPECT_FALSE(coded_input.ReadString(&str, 1 << 30));
 }
 
@@ -692,7 +698,7 @@ TEST_1D(CodedStreamTest, SkipInput, kBlockSizes) {
   {
     CodedInputStream coded_input(&input);
 
-    std::string str;
+    string str;
     EXPECT_TRUE(coded_input.ReadString(&str, strlen("<Before skipping>")));
     EXPECT_EQ("<Before skipping>", str);
     EXPECT_TRUE(coded_input.Skip(strlen("<To be skipped>")));
@@ -975,10 +981,10 @@ TEST_F(CodedStreamTest, TotalBytesLimit) {
   CodedInputStream coded_input(&input);
   coded_input.SetTotalBytesLimit(16, -1);
 
-  std::string str;
+  string str;
   EXPECT_TRUE(coded_input.ReadString(&str, 16));
 
-  std::vector<std::string> errors;
+  vector<string> errors;
 
   {
     ScopedMemoryLog error_log;
@@ -1005,7 +1011,7 @@ TEST_F(CodedStreamTest, TotalBytesLimitNotValidMessageEnd) {
   CodedInputStream::Limit limit = coded_input.PushLimit(16);
 
   // Read 16 bytes.
-  std::string str;
+  string str;
   EXPECT_TRUE(coded_input.ReadString(&str, 16));
 
   // Read a tag.  Should fail, but report being a valid endpoint since it's
@@ -1020,6 +1026,59 @@ TEST_F(CodedStreamTest, TotalBytesLimitNotValidMessageEnd) {
   // this time we're hitting the total bytes limit.
   EXPECT_EQ(0, coded_input.ReadTag());
   EXPECT_FALSE(coded_input.ConsumedEntireMessage());
+}
+
+// This method is used by the tests below.
+// It constructs a CodedInputStream with the given limits and tries to read 2KiB
+// of data from it. Then it returns the logged errors and warnings in the given
+// vectors.
+void CodedStreamTest::SetupTotalBytesLimitWarningTest(
+    int total_bytes_limit, int warning_threshold,
+    vector<string>* out_errors, vector<string>* out_warnings) {
+  ArrayInputStream raw_input(buffer_, sizeof(buffer_), 128);
+
+  ScopedMemoryLog scoped_log;
+  {
+    CodedInputStream input(&raw_input);
+    input.SetTotalBytesLimit(total_bytes_limit, warning_threshold);
+    string str;
+    EXPECT_TRUE(input.ReadString(&str, 2048));
+  }
+
+  *out_errors = scoped_log.GetMessages(ERROR);
+  *out_warnings = scoped_log.GetMessages(WARNING);
+}
+
+TEST_F(CodedStreamTest, TotalBytesLimitWarning) {
+  vector<string> errors;
+  vector<string> warnings;
+  SetupTotalBytesLimitWarningTest(10240, 1024, &errors, &warnings);
+
+  EXPECT_EQ(0, errors.size());
+
+  ASSERT_EQ(2, warnings.size());
+  EXPECT_PRED_FORMAT2(testing::IsSubstring,
+    "Reading dangerously large protocol message.  If the message turns out to "
+    "be larger than 10240 bytes, parsing will be halted for security reasons.",
+    warnings[0]);
+  EXPECT_PRED_FORMAT2(testing::IsSubstring,
+    "The total number of bytes read was 2048",
+    warnings[1]);
+}
+
+TEST_F(CodedStreamTest, TotalBytesLimitWarningDisabled) {
+  vector<string> errors;
+  vector<string> warnings;
+
+  // Test with -1
+  SetupTotalBytesLimitWarningTest(10240, -1, &errors, &warnings);
+  EXPECT_EQ(0, errors.size());
+  EXPECT_EQ(0, warnings.size());
+
+  // Test again with -2, expecting the same result
+  SetupTotalBytesLimitWarningTest(10240, -2, &errors, &warnings);
+  EXPECT_EQ(0, errors.size());
+  EXPECT_EQ(0, warnings.size());
 }
 
 
@@ -1059,6 +1118,7 @@ TEST_F(CodedStreamTest, RecursionLimit) {
   EXPECT_TRUE(coded_input.IncrementRecursionDepth());      // 6
   EXPECT_FALSE(coded_input.IncrementRecursionDepth());     // 7
 }
+
 
 class ReallyBigInputStream : public ZeroCopyInputStream {
  public:
@@ -1107,12 +1167,12 @@ TEST_F(CodedStreamTest, InputOver2G) {
   // input.BackUp() with the correct number of bytes on destruction.
   ReallyBigInputStream input;
 
-  std::vector<std::string> errors;
+  vector<string> errors;
 
   {
     ScopedMemoryLog error_log;
     CodedInputStream coded_input(&input);
-    std::string str;
+    string str;
     EXPECT_TRUE(coded_input.ReadString(&str, 512));
     EXPECT_TRUE(coded_input.ReadString(&str, 1024));
     errors = error_log.GetMessages(ERROR);

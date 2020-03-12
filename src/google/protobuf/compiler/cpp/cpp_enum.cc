@@ -46,16 +46,16 @@ namespace compiler {
 namespace cpp {
 
 EnumGenerator::EnumGenerator(const EnumDescriptor* descriptor,
-                             const std::string& dllexport_decl)
+                             const Options& options)
   : descriptor_(descriptor),
     classname_(ClassName(descriptor, false)),
-    dllexport_decl_(dllexport_decl) {
+    options_(options) {
 }
 
 EnumGenerator::~EnumGenerator() {}
 
 void EnumGenerator::GenerateDefinition(io::Printer* printer) {
-  std::map<std::string, std::string> vars;
+  map<string, string> vars;
   vars["classname"] = classname_;
   vars["short_name"] = descriptor_->name();
 
@@ -69,7 +69,7 @@ void EnumGenerator::GenerateDefinition(io::Printer* printer) {
     vars["name"] = descriptor_->value(i)->name();
     vars["number"] = SimpleItoa(descriptor_->value(i)->number());
     vars["prefix"] = (descriptor_->containing_type() == NULL) ?
-      std::string() : std::string( classname_ + "_" );
+      "" : classname_ + "_";
 
     if (i > 0) printer->Print(",\n");
     printer->Print(vars, "$prefix$$name$ = $number$");
@@ -88,10 +88,10 @@ void EnumGenerator::GenerateDefinition(io::Printer* printer) {
   vars["min_name"] = min_value->name();
   vars["max_name"] = max_value->name();
 
-  if (dllexport_decl_.empty()) {
+  if (options_.dllexport_decl.empty()) {
     vars["dllexport"] = "";
   } else {
-    vars["dllexport"] = dllexport_decl_ + " ";
+    vars["dllexport"] = options_.dllexport_decl + " ";
   }
 
   printer->Print(vars,
@@ -132,7 +132,7 @@ GenerateGetEnumDescriptorSpecializations(io::Printer* printer) {
 }
 
 void EnumGenerator::GenerateSymbolImports(io::Printer* printer) {
-  std::map<std::string, std::string> vars;
+  map<string, string> vars;
   vars["nested_name"] = descriptor_->name();
   vars["classname"] = classname_;
   printer->Print(vars, "typedef $classname$ $nested_name$;\n");
@@ -174,7 +174,7 @@ void EnumGenerator::GenerateSymbolImports(io::Printer* printer) {
 
 void EnumGenerator::GenerateDescriptorInitializer(
     io::Printer* printer, int index) {
-  std::map<std::string, std::string> vars;
+  map<string, string> vars;
   vars["classname"] = classname_;
   vars["index"] = SimpleItoa(index);
 
@@ -189,7 +189,7 @@ void EnumGenerator::GenerateDescriptorInitializer(
 }
 
 void EnumGenerator::GenerateMethods(io::Printer* printer) {
-  std::map<std::string, std::string> vars;
+  map<string, string> vars;
   vars["classname"] = classname_;
 
   if (HasDescriptorMethods(descriptor_->file())) {
@@ -208,13 +208,13 @@ void EnumGenerator::GenerateMethods(io::Printer* printer) {
   // each number once by first constructing a set containing all valid
   // numbers, then printing a case statement for each element.
 
-  std::set<int> numbers;
+  set<int> numbers;
   for (int j = 0; j < descriptor_->value_count(); j++) {
     const EnumValueDescriptor* value = descriptor_->value(j);
     numbers.insert(value->number());
   }
 
-  for (std::set<int>::iterator iter = numbers.begin();
+  for (set<int>::iterator iter = numbers.begin();
        iter != numbers.end(); ++iter) {
     printer->Print(
       "    case $number$:\n",

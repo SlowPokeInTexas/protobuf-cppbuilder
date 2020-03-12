@@ -48,8 +48,8 @@
 #include <google/protobuf/compiler/importer.h>
 #include <google/protobuf/descriptor.h>
 #include <google/protobuf/io/zero_copy_stream_impl.h>
-#include <google/protobuf/stubs/stl_util-inl.h>
 #include <google/protobuf/stubs/map-util.h>
+#include <google/protobuf/stubs/stl_util.h>
 #include <google/protobuf/stubs/strutil.h>
 #include <google/protobuf/stubs/substitute.h>
 
@@ -69,11 +69,11 @@ class MockErrorCollector : public MultiFileErrorCollector {
   MockErrorCollector() {}
   ~MockErrorCollector() {}
 
-  std::string text_;
+  string text_;
 
   // implements ErrorCollector ---------------------------------------
-  void AddError(const std::string& filename, int line, int column,
-                const std::string& message) {
+  void AddError(const string& filename, int line, int column,
+                const string& message) {
     strings::SubstituteAndAppend(&text_, "$0:$1:$2: $3\n",
                                  filename, line, column, message);
   }
@@ -86,13 +86,13 @@ class MockGeneratorContext : public GeneratorContext {
     STLDeleteValues(&files_);
   }
 
-  void ExpectFileMatches(const std::string& virtual_filename,
-                         const std::string& physical_filename) {
-    std::string* expected_contents = FindPtrOrNull(files_, virtual_filename);
+  void ExpectFileMatches(const string& virtual_filename,
+                         const string& physical_filename) {
+    string* expected_contents = FindPtrOrNull(files_, virtual_filename);
     ASSERT_TRUE(expected_contents != NULL)
       << "Generator failed to generate file: " << virtual_filename;
 
-    std::string actual_contents;
+    string actual_contents;
     File::ReadFileToStringOrDie(
       TestSourceDir() + "/" + physical_filename,
       &actual_contents);
@@ -104,16 +104,16 @@ class MockGeneratorContext : public GeneratorContext {
 
   // implements GeneratorContext --------------------------------------
 
-  virtual io::ZeroCopyOutputStream* Open(const std::string& filename) {
-    std::string** map_slot = &files_[filename];
+  virtual io::ZeroCopyOutputStream* Open(const string& filename) {
+    string** map_slot = &files_[filename];
     if (*map_slot != NULL) delete *map_slot;
-    *map_slot = new std::string;
+    *map_slot = new string;
 
     return new io::StringOutputStream(*map_slot);
   }
 
  private:
-  std::map<std::string, std::string*> files_;
+  map<string, string*> files_;
 };
 
 TEST(BootstrapTest, GeneratedDescriptorMatches) {
@@ -131,8 +131,8 @@ TEST(BootstrapTest, GeneratedDescriptorMatches) {
 
   CppGenerator generator;
   MockGeneratorContext context;
-  std::string error;
-  std::string parameter;
+  string error;
+  string parameter;
   parameter = "dllexport_decl=LIBPROTOBUF_EXPORT";
   ASSERT_TRUE(generator.Generate(proto_file, parameter,
                                  &context, &error));

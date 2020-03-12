@@ -37,7 +37,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
-#if defined(_MSC_VER) || defined(__BORLANDC__)
+#ifdef _MSC_VER
 #include <io.h>
 #else
 #include <unistd.h>
@@ -73,10 +73,10 @@ TEST(MessageTest, SerializeHelpers) {
 
   protobuf_unittest::TestAllTypes message;
   TestUtil::SetAllFields(&message);
-  std::stringstream stream;
+  stringstream stream;
 
-  std::string str1("foo");
-  std::string str2("bar");
+  string str1("foo");
+  string str2("bar");
 
   EXPECT_TRUE(message.SerializeToString(&str1));
   EXPECT_TRUE(message.AppendToString(&str2));
@@ -89,7 +89,7 @@ TEST(MessageTest, SerializeHelpers) {
   EXPECT_TRUE(str2.substr(3) == str1);
 
   // GCC gives some sort of error if we try to just do stream.str() == str1.
-  std::string temp = stream.str();
+  string temp = stream.str();
   EXPECT_TRUE(temp == str1);
 
   EXPECT_TRUE(message.SerializeAsString() == str1);
@@ -97,7 +97,7 @@ TEST(MessageTest, SerializeHelpers) {
 }
 
 TEST(MessageTest, SerializeToBrokenOstream) {
-  std::ofstream out;
+  ofstream out;
   protobuf_unittest::TestAllTypes message;
   message.set_optional_int32(123);
 
@@ -105,7 +105,7 @@ TEST(MessageTest, SerializeToBrokenOstream) {
 }
 
 TEST(MessageTest, ParseFromFileDescriptor) {
-  std::string filename = TestSourceDir() +
+  string filename = TestSourceDir() +
                     "/google/protobuf/testdata/golden_message";
   int file = open(filename.c_str(), O_RDONLY | O_BINARY);
 
@@ -117,7 +117,7 @@ TEST(MessageTest, ParseFromFileDescriptor) {
 }
 
 TEST(MessageTest, ParsePackedFromFileDescriptor) {
-  std::string filename =
+  string filename =
       TestSourceDir() +
       "/google/protobuf/testdata/golden_packed_fields_message";
   int file = open(filename.c_str(), O_RDONLY | O_BINARY);
@@ -132,7 +132,7 @@ TEST(MessageTest, ParsePackedFromFileDescriptor) {
 TEST(MessageTest, ParseHelpers) {
   // TODO(kenton):  Test more helpers?  They're all two-liners so it seems
   //   like a waste of time.
-  std::string data;
+  string data;
 
   {
     // Set up.
@@ -151,7 +151,7 @@ TEST(MessageTest, ParseHelpers) {
   {
     // Test ParseFromIstream.
     protobuf_unittest::TestAllTypes message;
-    std::stringstream stream(data);
+    stringstream stream(data);
     EXPECT_TRUE(message.ParseFromIstream(&stream));
     EXPECT_TRUE(stream.eof());
     TestUtil::ExpectAllFieldsSet(message);
@@ -159,7 +159,7 @@ TEST(MessageTest, ParseHelpers) {
 
   {
     // Test ParseFromBoundedZeroCopyStream.
-    std::string data_with_junk(data);
+    string data_with_junk(data);
     data_with_junk.append("some junk on the end");
     io::ArrayInputStream stream(data_with_junk.data(), data_with_junk.size());
     protobuf_unittest::TestAllTypes message;
@@ -179,7 +179,7 @@ TEST(MessageTest, ParseHelpers) {
 
 TEST(MessageTest, ParseFailsIfNotInitialized) {
   unittest::TestRequired message;
-  std::vector<std::string> errors;
+  vector<string> errors;
 
   {
     ScopedMemoryLog log;
@@ -205,11 +205,11 @@ TEST(MessageTest, InitializationErrorString) {
   EXPECT_EQ("a, b, c", message.InitializationErrorString());
 }
 
-#ifdef GTEST_HAS_DEATH_TEST  // death tests do not work on Windows yet.
+#ifdef PROTOBUF_HAS_DEATH_TEST
 
 TEST(MessageTest, SerializeFailsIfNotInitialized) {
   unittest::TestRequired message;
-  std::string data;
+  string data;
   EXPECT_DEBUG_DEATH(EXPECT_TRUE(message.SerializeToString(&data)),
     "Can't serialize message of type \"protobuf_unittest.TestRequired\" because "
     "it is missing required fields: a, b, c");
@@ -222,7 +222,7 @@ TEST(MessageTest, CheckInitialized) {
     "fields: a, b, c");
 }
 
-#endif  // GTEST_HAS_DEATH_TEST
+#endif  // PROTOBUF_HAS_DEATH_TEST
 
 TEST(MessageTest, BypassInitializationCheckOnSerialize) {
   unittest::TestRequired message;
@@ -233,7 +233,7 @@ TEST(MessageTest, BypassInitializationCheckOnSerialize) {
 
 TEST(MessageTest, FindInitializationErrors) {
   unittest::TestRequired message;
-  std::vector<std::string> errors;
+  vector<string> errors;
   message.FindInitializationErrors(&errors);
   ASSERT_EQ(3, errors.size());
   EXPECT_EQ("a", errors[0]);
@@ -257,6 +257,78 @@ TEST(MessageTest, ParseFailsOnInvalidMessageEnd) {
   EXPECT_FALSE(message.ParseFromArray("\014", 1));
 }
 
+namespace {
+
+void ExpectMessageMerged(const unittest::TestAllTypes& message) {
+  EXPECT_EQ(3, message.optional_int32());
+  EXPECT_EQ(2, message.optional_int64());
+  EXPECT_EQ("hello", message.optional_string());
+}
+
+void AssignParsingMergeMessages(
+    unittest::TestAllTypes* msg1,
+    unittest::TestAllTypes* msg2,
+    unittest::TestAllTypes* msg3) {
+  msg1->set_optional_int32(1);
+  msg2->set_optional_int64(2);
+  msg3->set_optional_int32(3);
+  msg3->set_optional_string("hello");
+}
+
+}  // namespace
+
+// Test that if an optional or required message/group field appears multiple
+// times in the input, they need to be merged.
+TEST(MessageTest, ParsingMerge) {
+  unittest::TestParsingMerge::RepeatedFieldsGenerator generator;
+  unittest::TestAllTypes* msg1;
+  unittest::TestAllTypes* msg2;
+  unittest::TestAllTypes* msg3;
+
+#define ASSIGN_REPEATED_FIELD(FIELD)                \
+  msg1 = generator.add_##FIELD();                   \
+  msg2 = generator.add_##FIELD();                   \
+  msg3 = generator.add_##FIELD();                   \
+  AssignParsingMergeMessages(msg1, msg2, msg3)
+
+  ASSIGN_REPEATED_FIELD(field1);
+  ASSIGN_REPEATED_FIELD(field2);
+  ASSIGN_REPEATED_FIELD(field3);
+  ASSIGN_REPEATED_FIELD(ext1);
+  ASSIGN_REPEATED_FIELD(ext2);
+
+#undef ASSIGN_REPEATED_FIELD
+#define ASSIGN_REPEATED_GROUP(FIELD)                \
+  msg1 = generator.add_##FIELD()->mutable_field1(); \
+  msg2 = generator.add_##FIELD()->mutable_field1(); \
+  msg3 = generator.add_##FIELD()->mutable_field1(); \
+  AssignParsingMergeMessages(msg1, msg2, msg3)
+
+  ASSIGN_REPEATED_GROUP(group1);
+  ASSIGN_REPEATED_GROUP(group2);
+
+#undef ASSIGN_REPEATED_GROUP
+
+  string buffer;
+  generator.SerializeToString(&buffer);
+  unittest::TestParsingMerge parsing_merge;
+  parsing_merge.ParseFromString(buffer);
+
+  // Required and optional fields should be merged.
+  ExpectMessageMerged(parsing_merge.required_all_types());
+  ExpectMessageMerged(parsing_merge.optional_all_types());
+  ExpectMessageMerged(
+      parsing_merge.optionalgroup().optional_group_all_types());
+  ExpectMessageMerged(
+      parsing_merge.GetExtension(unittest::TestParsingMerge::optional_ext));
+
+  // Repeated fields should not be merged.
+  EXPECT_EQ(3, parsing_merge.repeated_all_types_size());
+  EXPECT_EQ(3, parsing_merge.repeatedgroup_size());
+  EXPECT_EQ(3, parsing_merge.ExtensionSize(
+      unittest::TestParsingMerge::repeated_ext));
+}
+
 TEST(MessageFactoryTest, GeneratedFactoryLookup) {
   EXPECT_EQ(
     MessageFactory::generated_factory()->GetPrototype(
@@ -276,6 +348,7 @@ TEST(MessageFactoryTest, GeneratedFactoryUnknownType) {
   EXPECT_TRUE(
     MessageFactory::generated_factory()->GetPrototype(descriptor) == NULL);
 }
+
 
 }  // namespace protobuf
 }  // namespace google

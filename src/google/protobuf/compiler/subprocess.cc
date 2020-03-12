@@ -33,6 +33,7 @@
 #include <google/protobuf/compiler/subprocess.h>
 
 #include <algorithm>
+#include <iostream>
 
 #ifndef _WIN32
 #include <errno.h>
@@ -71,7 +72,7 @@ Subprocess::~Subprocess() {
   }
 }
 
-void Subprocess::Start(const std::string& program, SearchMode search_mode) {
+void Subprocess::Start(const string& program, SearchMode search_mode) {
   // Create the pipes.
   HANDLE stdin_pipe_read;
   HANDLE stdin_pipe_write;
@@ -143,7 +144,7 @@ void Subprocess::Start(const std::string& program, SearchMode search_mode) {
 }
 
 bool Subprocess::Communicate(const Message& input, Message* output,
-                             std::string* error) {
+                             string* error) {
   if (process_start_error_ != ERROR_SUCCESS) {
     *error = Win32ErrorMessage(process_start_error_);
     return false;
@@ -151,8 +152,8 @@ bool Subprocess::Communicate(const Message& input, Message* output,
 
   GOOGLE_CHECK(child_handle_ != NULL) << "Must call Start() first.";
 
-  std::string input_data = input.SerializeAsString();
-  std::string output_data;
+  string input_data = input.SerializeAsString();
+  string output_data;
 
   int input_pos = 0;
 
@@ -247,14 +248,14 @@ bool Subprocess::Communicate(const Message& input, Message* output,
   }
 
   if (!output->ParseFromString(output_data)) {
-    *error = "Plugin output is unparseable: " + protobuf::CEscape(output_data);
+    *error = "Plugin output is unparseable: " + CEscape(output_data);
     return false;
   }
 
   return true;
 }
 
-std::string Subprocess::Win32ErrorMessage(DWORD error_code) {
+string Subprocess::Win32ErrorMessage(DWORD error_code) {
   char* message;
 
   // WTF?
@@ -265,7 +266,7 @@ std::string Subprocess::Win32ErrorMessage(DWORD error_code) {
                 (LPTSTR)&message,  // NOT A BUG!
                 0, NULL);
 
-  std::string result = message;
+  string result = message;
   LocalFree(message);
   return result;
 }
@@ -286,7 +287,7 @@ Subprocess::~Subprocess() {
   }
 }
 
-void Subprocess::Start(const std::string& program, SearchMode search_mode) {
+void Subprocess::Start(const string& program, SearchMode search_mode) {
   // Note that we assume that there are no other threads, thus we don't have to
   // do crazy stuff like using socket pairs or avoiding libc locks.
 
@@ -294,8 +295,8 @@ void Subprocess::Start(const std::string& program, SearchMode search_mode) {
   int stdin_pipe[2];
   int stdout_pipe[2];
 
-  pipe(stdin_pipe);
-  pipe(stdout_pipe);
+  GOOGLE_CHECK(pipe(stdin_pipe) != -1);
+  GOOGLE_CHECK(pipe(stdout_pipe) != -1);
 
   char* argv[2] = { strdup(program.c_str()), NULL };
 
@@ -323,9 +324,11 @@ void Subprocess::Start(const std::string& program, SearchMode search_mode) {
 
     // Write directly to STDERR_FILENO to avoid stdio code paths that may do
     // stuff that is unsafe here.
-    write(STDERR_FILENO, argv[0], strlen(argv[0]));
+    int ignored;
+    ignored = write(STDERR_FILENO, argv[0], strlen(argv[0]));
     const char* message = ": program not found or is not executable\n";
-    write(STDERR_FILENO, message, strlen(message));
+    ignored = write(STDERR_FILENO, message, strlen(message));
+    (void) ignored;
 
     // Must use _exit() rather than exit() to avoid flushing output buffers
     // that will also be flushed by the parent.
@@ -342,7 +345,7 @@ void Subprocess::Start(const std::string& program, SearchMode search_mode) {
 }
 
 bool Subprocess::Communicate(const Message& input, Message* output,
-                             std::string* error) {
+                             string* error) {
 
   GOOGLE_CHECK_NE(child_stdin_, -1) << "Must call Start() first.";
 
@@ -352,11 +355,11 @@ bool Subprocess::Communicate(const Message& input, Message* output,
   // Make sure SIGPIPE is disabled so that if the child dies it doesn't kill us.
   SignalHandler* old_pipe_handler = signal(SIGPIPE, SIG_IGN);
 
-  std::string input_data = input.SerializeAsString();
-  std::string output_data;
+  string input_data = input.SerializeAsString();
+  string output_data;
 
   int input_pos = 0;
-  int max_fd = std::max(child_stdin_, child_stdout_);
+  int max_fd = max(child_stdin_, child_stdout_);
 
   while (child_stdout_ != -1) {
     fd_set read_fds;

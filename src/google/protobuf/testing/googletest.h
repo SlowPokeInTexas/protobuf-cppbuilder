@@ -34,38 +34,45 @@
 #ifndef GOOGLE_PROTOBUF_GOOGLETEST_H__
 #define GOOGLE_PROTOBUF_GOOGLETEST_H__
 
+#include <map>
 #include <vector>
 #include <google/protobuf/stubs/common.h>
+
+// Disable death tests if we use exceptions in CHECK().
+#if !PROTOBUF_USE_EXCEPTIONS && defined(GTEST_HAS_DEATH_TEST)
+#define PROTOBUF_HAS_DEATH_TEST
+#endif
 
 namespace google {
 namespace protobuf {
 
 // When running unittests, get the directory containing the source code.
-std::string TestSourceDir();
+string TestSourceDir();
 
 // When running unittests, get a directory where temporary files may be
 // placed.
-std::string TestTempDir();
+string TestTempDir();
 
 // Capture all text written to stdout or stderr.
 void CaptureTestStdout();
 void CaptureTestStderr();
 
 // Stop capturing stdout or stderr and return the text captured.
-std::string GetCapturedTestStdout();
-std::string GetCapturedTestStderr();
+string GetCapturedTestStdout();
+string GetCapturedTestStderr();
 
 // For use with ScopedMemoryLog::GetMessages().  Inside Google the LogLevel
 // constants don't have the LOGLEVEL_ prefix, so the code that used
 // ScopedMemoryLog refers to LOGLEVEL_ERROR as just ERROR.
 #undef ERROR  // defend against promiscuous windows.h
 static const LogLevel ERROR = LOGLEVEL_ERROR;
+static const LogLevel WARNING = LOGLEVEL_WARNING;
 
 // Receives copies of all LOG(ERROR) messages while in scope.  Sample usage:
 //   {
 //     ScopedMemoryLog log;  // constructor registers object as a log sink
 //     SomeRoutineThatMayLogMessages();
-//     const vector<std::string>& warnings = log.GetMessages(ERROR);
+//     const vector<string>& warnings = log.GetMessages(ERROR);
 //   }  // destructor unregisters object as a log sink
 // This is a dummy implementation which covers only what is used by protocol
 // buffer unit tests.
@@ -74,18 +81,15 @@ class ScopedMemoryLog {
   ScopedMemoryLog();
   virtual ~ScopedMemoryLog();
 
-  // Fetches all messages logged.  The internal version of this class
-  // would only fetch messages at the given security level, but the protobuf
-  // open source version ignores the argument since we always pass ERROR
-  // anyway.
-  const std::vector<std::string>& GetMessages(LogLevel dummy) const;
+  // Fetches all messages with the given severity level.
+  const vector<string>& GetMessages(LogLevel error);
 
  private:
-  std::vector<std::string> messages_;
+  map<LogLevel, vector<string> > messages_;
   LogHandler* old_handler_;
 
   static void HandleLog(LogLevel level, const char* filename, int line,
-                        const std::string& message);
+                        const string& message);
 
   static ScopedMemoryLog* active_log_;
 

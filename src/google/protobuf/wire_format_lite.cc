@@ -36,10 +36,11 @@
 
 #include <stack>
 #include <string>
+#include <vector>
 #include <google/protobuf/stubs/common.h>
 #include <google/protobuf/io/coded_stream_inl.h>
 #include <google/protobuf/io/zero_copy_stream.h>
-#include <google/protobuf/io/zero_copy_stream_impl.h>
+#include <google/protobuf/io/zero_copy_stream_impl_lite.h>
 
 namespace google {
 namespace protobuf {
@@ -55,10 +56,10 @@ const int WireFormatLite::kMessageSetMessageTag;
 #endif
 
 const int WireFormatLite::kMessageSetItemTagsSize =
-  io::CodedOutputStream::VarintSize32(kMessageSetItemStartTag) +
-  io::CodedOutputStream::VarintSize32(kMessageSetItemEndTag) +
-  io::CodedOutputStream::VarintSize32(kMessageSetTypeIdTag) +
-  io::CodedOutputStream::VarintSize32(kMessageSetMessageTag);
+  io::CodedOutputStream::StaticVarintSize32<kMessageSetItemStartTag>::value +
+  io::CodedOutputStream::StaticVarintSize32<kMessageSetItemEndTag>::value +
+  io::CodedOutputStream::StaticVarintSize32<kMessageSetTypeIdTag>::value +
+  io::CodedOutputStream::StaticVarintSize32<kMessageSetMessageTag>::value;
 
 const WireFormatLite::CppType
 WireFormatLite::kFieldTypeToCppTypeMap[MAX_FIELD_TYPE + 1] = {
@@ -276,16 +277,18 @@ void WireFormatLite::WriteEnum(int field_number, int value,
   WriteEnumNoTag(value, output);
 }
 
-void WireFormatLite::WriteString(int field_number, const std::string& value,
+void WireFormatLite::WriteString(int field_number, const string& value,
                                  io::CodedOutputStream* output) {
   // String is for UTF-8 text only
   WriteTag(field_number, WIRETYPE_LENGTH_DELIMITED, output);
+  GOOGLE_CHECK(value.size() <= kint32max);
   output->WriteVarint32(value.size());
   output->WriteString(value);
 }
-void WireFormatLite::WriteBytes(int field_number, const std::string& value,
+void WireFormatLite::WriteBytes(int field_number, const string& value,
                                 io::CodedOutputStream* output) {
   WriteTag(field_number, WIRETYPE_LENGTH_DELIMITED, output);
+  GOOGLE_CHECK(value.size() <= kint32max);
   output->WriteVarint32(value.size());
   output->WriteString(value);
 }
@@ -339,7 +342,7 @@ void WireFormatLite::WriteMessageMaybeToArray(int field_number,
 }
 
 bool WireFormatLite::ReadString(io::CodedInputStream* input,
-                                std::string* value) {
+                                string* value) {
   // String is for UTF-8 text only
   uint32 length;
   if (!input->ReadVarint32(&length)) return false;
@@ -347,7 +350,7 @@ bool WireFormatLite::ReadString(io::CodedInputStream* input,
   return true;
 }
 bool WireFormatLite::ReadBytes(io::CodedInputStream* input,
-                               std::string* value) {
+                               string* value) {
   uint32 length;
   if (!input->ReadVarint32(&length)) return false;
   return input->InternalReadStringInline(value, length);

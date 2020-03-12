@@ -50,19 +50,19 @@ JavaGenerator::JavaGenerator() {}
 JavaGenerator::~JavaGenerator() {}
 
 bool JavaGenerator::Generate(const FileDescriptor* file,
-                             const std::string& parameter,
+                             const string& parameter,
                              GeneratorContext* context,
-                             std::string* error) const {
+                             string* error) const {
   // -----------------------------------------------------------------
   // parse generator options
 
   // Name a file where we will write a list of generated file names, one
   // per line.
-  std::string output_list_file;
+  string output_list_file;
 
 
-  std::vector<std::pair<std::string, std::string> > options;
-  compiler::ParseGeneratorParameter(parameter, &options);
+  vector<pair<string, string> > options;
+  ParseGeneratorParameter(parameter, &options);
 
   for (int i = 0; i < options.size(); i++) {
     if (options[i].first == "output_list_file") {
@@ -89,11 +89,11 @@ bool JavaGenerator::Generate(const FileDescriptor* file,
     return false;
   }
 
-  std::string package_dir = JavaPackageToDir(file_generator.java_package());
+  string package_dir = JavaPackageToDir(file_generator.java_package());
 
-  std::vector<std::string> all_files;
+  vector<string> all_files;
 
-  std::string java_filename = package_dir;
+  string java_filename = package_dir;
   java_filename += file_generator.classname();
   java_filename += ".java";
   all_files.push_back(java_filename);

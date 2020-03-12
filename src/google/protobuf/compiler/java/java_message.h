@@ -35,6 +35,7 @@
 #ifndef GOOGLE_PROTOBUF_COMPILER_JAVA_MESSAGE_H__
 #define GOOGLE_PROTOBUF_COMPILER_JAVA_MESSAGE_H__
 
+#include <string>
 #include <google/protobuf/stubs/common.h>
 #include <google/protobuf/compiler/java/java_field.h>
 
@@ -93,6 +94,9 @@ class MessageGenerator {
   void GenerateIsInitialized(io::Printer* printer,
       UseMemoization useMemoization);
   void GenerateEqualsAndHashCode(io::Printer* printer);
+
+  void GenerateParser(io::Printer* printer);
+  void GenerateParsingConstructor(io::Printer* printer);
 
   const Descriptor* descriptor_;
   FieldGeneratorMap field_generators_;

@@ -48,12 +48,17 @@
 #include <stdint.h>
 #endif
 
+#ifndef PROTOBUF_USE_EXCEPTIONS
 #if defined(_MSC_VER) && defined(_CPPUNWIND)
-  #define PROTOBUF_USE_EXCEPTIONS
+  #define PROTOBUF_USE_EXCEPTIONS 1
 #elif defined(__EXCEPTIONS)
-  #define PROTOBUF_USE_EXCEPTIONS
+  #define PROTOBUF_USE_EXCEPTIONS 1
+#else
+  #define PROTOBUF_USE_EXCEPTIONS 0
 #endif
-#ifdef PROTOBUF_USE_EXCEPTIONS
+#endif
+
+#if defined(PROTOBUF_USE_EXCEPTIONS)
 #include <exception>
 #endif
 
@@ -73,6 +78,7 @@ inline BOOL GetMessage(
   return GetMessage_Win32(lpMsg, hWnd, wMsgFilterMin, wMsgFilterMax);
 }
 #endif
+
 
 namespace std {}
 
@@ -107,24 +113,24 @@ namespace internal {
 
 // The current version, represented as a single integer to make comparison
 // easier:  major * 10^6 + minor * 10^3 + micro
-#define GOOGLE_PROTOBUF_VERSION 2004002
+#define GOOGLE_PROTOBUF_VERSION 2005000
 
 // The minimum library version which works with the current version of the
 // headers.
-#define GOOGLE_PROTOBUF_MIN_LIBRARY_VERSION 2004000
+#define GOOGLE_PROTOBUF_MIN_LIBRARY_VERSION 2005000
 
 // The minimum header version which works with the current version of
 // the library.  This constant should only be used by protoc's C++ code
 // generator.
-static const int kMinHeaderVersionForLibrary = 2004000;
+static const int kMinHeaderVersionForLibrary = 2005000;
 
 // The minimum protoc version which works with the current version of the
 // headers.
-#define GOOGLE_PROTOBUF_MIN_PROTOC_VERSION 2004000
+#define GOOGLE_PROTOBUF_MIN_PROTOC_VERSION 2005000
 
 // The minimum header version which works with the current version of
 // protoc.  This constant should only be used in VerifyVersion().
-static const int kMinHeaderVersionForProtoc = 2004000;
+static const int kMinHeaderVersionForProtoc = 2005000;
 
 // Verifies that the headers and libraries are compatible.  Use the macro
 // below to call this.
@@ -685,6 +691,7 @@ class LIBPROTOBUF_EXPORT LogFinisher {
 #undef GOOGLE_CHECK_LE
 #undef GOOGLE_CHECK_GT
 #undef GOOGLE_CHECK_GE
+#undef GOOGLE_CHECK_NOTNULL
 
 #undef GOOGLE_DLOG
 #undef GOOGLE_DCHECK
@@ -710,6 +717,18 @@ class LIBPROTOBUF_EXPORT LogFinisher {
 #define GOOGLE_CHECK_LE(A, B) GOOGLE_CHECK((A) <= (B))
 #define GOOGLE_CHECK_GT(A, B) GOOGLE_CHECK((A) >  (B))
 #define GOOGLE_CHECK_GE(A, B) GOOGLE_CHECK((A) >= (B))
+
+namespace internal {
+template<typename T>
+T* CheckNotNull(const char *file, int line, const char *name, T* val) {
+  if (val == NULL) {
+    GOOGLE_LOG(FATAL) << name;
+  }
+  return val;
+}
+}  // namespace internal
+#define GOOGLE_CHECK_NOTNULL(A) \
+  internal::CheckNotNull(__FILE__, __LINE__, "'" #A "' must not be NULL", (A))
 
 #ifdef NDEBUG
 
@@ -1135,25 +1154,19 @@ using internal::WriterMutexLock;
 using internal::MutexLockMaybe;
 
 // ===================================================================
-// from google3/base/type_traits.h
+// from google3/util/utf8/public/unilib.h
 
 namespace internal {
-
-// Specified by TR1 [4.7.4] Pointer modifications.
-template<typename T> struct remove_pointer { typedef T type; };
-template<typename T> struct remove_pointer<T*> { typedef T type; };
-template<typename T> struct remove_pointer<T* const> { typedef T type; };
-template<typename T> struct remove_pointer<T* volatile> { typedef T type; };
-template<typename T> struct remove_pointer<T* const volatile> {
-  typedef T type; };
-
-// ===================================================================
 
 // Checks if the buffer contains structurally-valid UTF-8.  Implemented in
 // structurally_valid.cc.
 LIBPROTOBUF_EXPORT bool IsStructurallyValidUTF8(const char* buf, int len);
 
 }  // namespace internal
+
+// ===================================================================
+// from google3/util/endian/endian.h
+LIBPROTOBUF_EXPORT uint32 ghtonl(uint32 x);
 
 // ===================================================================
 // Shutdown support.
@@ -1180,7 +1193,7 @@ LIBPROTOBUF_EXPORT void OnShutdown(void (*func)());
 
 }  // namespace internal
 
-#ifdef PROTOBUF_USE_EXCEPTIONS
+#if defined(PROTOBUF_USE_EXCEPTIONS)
 class FatalException : public std::exception {
  public:
   FatalException(const char* filename, int line, const std::string& message)
@@ -1199,6 +1212,10 @@ class FatalException : public std::exception {
   const std::string message_;
 };
 #endif
+
+// This is at the end of the file instead of the beginning to work around a bug
+// in some versions of MSVC.
+using namespace std;  // Don't do this at home, kids.
 
 }  // namespace protobuf
 }  // namespace google

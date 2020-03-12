@@ -33,9 +33,12 @@
 //  Sanjay Ghemawat, Jeff Dean, and others.
 
 #include <limits>
+#include <map>
+#include <vector>
 #include <google/protobuf/stubs/hash.h>
 
 #include <google/protobuf/compiler/cpp/cpp_helpers.h>
+#include <google/protobuf/io/printer.h>
 #include <google/protobuf/stubs/common.h>
 #include <google/protobuf/stubs/strutil.h>
 #include <google/protobuf/stubs/substitute.h>
@@ -48,12 +51,12 @@ namespace cpp {
 
 namespace {
 
-std::string DotsToUnderscores(const std::string& name) {
-  return protobuf::StringReplace(name, ".", "_", true);
+string DotsToUnderscores(const string& name) {
+  return StringReplace(name, ".", "_", true);
 }
 
-std::string DotsToColons(const std::string& name) {
-  return protobuf::StringReplace(name, ".", "::", true);
+string DotsToColons(const string& name) {
+  return StringReplace(name, ".", "::", true);
 }
 
 const char* const kKeywordList[] = {
@@ -69,18 +72,18 @@ const char* const kKeywordList[] = {
   "void", "volatile", "wchar_t", "while", "xor", "xor_eq"
 };
 
-hash_set<std::string> MakeKeywordsMap() {
-  hash_set<std::string> result;
+hash_set<string> MakeKeywordsMap() {
+  hash_set<string> result;
   for (int i = 0; i < GOOGLE_ARRAYSIZE(kKeywordList); i++) {
     result.insert(kKeywordList[i]);
   }
   return result;
 }
 
-hash_set<std::string> kKeywords = MakeKeywordsMap();
+hash_set<string> kKeywords = MakeKeywordsMap();
 
-std::string UnderscoresToCamelCase(const std::string& input, bool cap_next_letter) {
-  std::string result;
+string UnderscoresToCamelCase(const string& input, bool cap_next_letter) {
+  string result;
   // Note:  I distrust ctype.h due to locales.
   for (int i = 0; i < input.size(); i++) {
     if ('a' <= input[i] && input[i] <= 'z') {
@@ -104,6 +107,20 @@ std::string UnderscoresToCamelCase(const std::string& input, bool cap_next_lette
   return result;
 }
 
+// Returns whether the provided descriptor has an extension. This includes its
+// nested types.
+bool HasExtension(const Descriptor* descriptor) {
+  if (descriptor->extension_count() > 0) {
+    return true;
+  }
+  for (int i = 0; i < descriptor->nested_type_count(); ++i) {
+    if (HasExtension(descriptor->nested_type(i))) {
+      return true;
+    }
+  }
+  return false;
+}
+
 }  // namespace
 
 const char kThickSeparator[] =
@@ -111,15 +128,15 @@ const char kThickSeparator[] =
 const char kThinSeparator[] =
   "// -------------------------------------------------------------------\n";
 
-std::string ClassName(const Descriptor* descriptor, bool qualified) {
+string ClassName(const Descriptor* descriptor, bool qualified) {
 
   // Find "outer", the descriptor of the top-level message in which
   // "descriptor" is embedded.
   const Descriptor* outer = descriptor;
   while (outer->containing_type() != NULL) outer = outer->containing_type();
 
-  const std::string& outer_name = outer->full_name();
-  std::string inner_name = descriptor->full_name().substr(outer_name.size());
+  const string& outer_name = outer->full_name();
+  string inner_name = descriptor->full_name().substr(outer_name.size());
 
   if (qualified) {
     return "::" + DotsToColons(outer_name) + DotsToUnderscores(inner_name);
@@ -128,15 +145,15 @@ std::string ClassName(const Descriptor* descriptor, bool qualified) {
   }
 }
 
-std::string ClassName(const EnumDescriptor* enum_descriptor, bool qualified) {
+string ClassName(const EnumDescriptor* enum_descriptor, bool qualified) {
   if (enum_descriptor->containing_type() == NULL) {
     if (qualified) {
-      return DotsToColons(enum_descriptor->full_name());
+      return "::" + DotsToColons(enum_descriptor->full_name());
     } else {
       return enum_descriptor->name();
     }
   } else {
-    std::string result = ClassName(enum_descriptor->containing_type(), qualified);
+    string result = ClassName(enum_descriptor->containing_type(), qualified);
     result += '_';
     result += enum_descriptor->name();
     return result;
@@ -144,23 +161,23 @@ std::string ClassName(const EnumDescriptor* enum_descriptor, bool qualified) {
 }
 
 
-std::string SuperClassName(const Descriptor* descriptor) {
+string SuperClassName(const Descriptor* descriptor) {
   return HasDescriptorMethods(descriptor->file()) ?
       "::google::protobuf::Message" : "::google::protobuf::MessageLite";
 }
 
-std::string FieldName(const FieldDescriptor* field) {
-  std::string result = field->name();
-  protobuf::LowerString(&result);
+string FieldName(const FieldDescriptor* field) {
+  string result = field->name();
+  LowerString(&result);
   if (kKeywords.count(result) > 0) {
     result.append("_");
   }
   return result;
 }
 
-std::string FieldConstantName(const FieldDescriptor *field) {
-  std::string field_name = UnderscoresToCamelCase(field->name(), true);
-  std::string result = "k" + field_name + "FieldNumber";
+string FieldConstantName(const FieldDescriptor *field) {
+  string field_name = UnderscoresToCamelCase(field->name(), true);
+  string result = "k" + field_name + "FieldNumber";
 
   if (!field->is_extension() &&
       field->containing_type()->FindFieldByCamelcaseName(
@@ -174,17 +191,17 @@ std::string FieldConstantName(const FieldDescriptor *field) {
   return result;
 }
 
-std::string FieldMessageTypeName(const FieldDescriptor* field) {
+string FieldMessageTypeName(const FieldDescriptor* field) {
   // Note:  The Google-internal version of Protocol Buffers uses this function
   //   as a hook point for hacks to support legacy code.
   return ClassName(field->message_type(), true);
 }
 
-std::string StripProto(const std::string& filename) {
-  if (protobuf::HasSuffixString(filename, ".protodevel")) {
-    return protobuf::StripSuffixString(filename, ".protodevel");
+string StripProto(const string& filename) {
+  if (HasSuffixString(filename, ".protodevel")) {
+    return StripSuffixString(filename, ".protodevel");
   } else {
-    return protobuf::StripSuffixString(filename, ".proto");
+    return StripSuffixString(filename, ".proto");
   }
 }
 
@@ -239,21 +256,34 @@ const char* DeclaredTypeMethodName(FieldDescriptor::Type type) {
   return "";
 }
 
-std::string DefaultValue(const FieldDescriptor* field) {
+string DefaultValue(const FieldDescriptor* field) {
   switch (field->cpp_type()) {
     case FieldDescriptor::CPPTYPE_INT32:
+      // gcc rejects the decimal form of kint32min and kint64min.
+      if (field->default_value_int32() == kint32min) {
+        // Make sure we are in a 2's complement system.
+        GOOGLE_COMPILE_ASSERT(kint32min == -0x80000000, kint32min_value_error);
+        return "-0x80000000";
+      }
       return SimpleItoa(field->default_value_int32());
     case FieldDescriptor::CPPTYPE_UINT32:
       return SimpleItoa(field->default_value_uint32()) + "u";
     case FieldDescriptor::CPPTYPE_INT64:
+      // See the comments for CPPTYPE_INT32.
+      if (field->default_value_int64() == kint64min) {
+        // Make sure we are in a 2's complement system.
+        GOOGLE_COMPILE_ASSERT(kint64min == GOOGLE_LONGLONG(-0x8000000000000000),
+                       kint64min_value_error);
+        return "GOOGLE_LONGLONG(-0x8000000000000000)";
+      }
       return "GOOGLE_LONGLONG(" + SimpleItoa(field->default_value_int64()) + ")";
     case FieldDescriptor::CPPTYPE_UINT64:
       return "GOOGLE_ULONGLONG(" + SimpleItoa(field->default_value_uint64())+ ")";
     case FieldDescriptor::CPPTYPE_DOUBLE: {
       double value = field->default_value_double();
-      if (value == std::numeric_limits<double>::infinity()) {
+      if (value == numeric_limits<double>::infinity()) {
         return "::google::protobuf::internal::Infinity()";
-      } else if (value == -std::numeric_limits<double>::infinity()) {
+      } else if (value == -numeric_limits<double>::infinity()) {
         return "-::google::protobuf::internal::Infinity()";
       } else if (value != value) {
         return "::google::protobuf::internal::NaN()";
@@ -264,18 +294,18 @@ std::string DefaultValue(const FieldDescriptor* field) {
     case FieldDescriptor::CPPTYPE_FLOAT:
       {
         float value = field->default_value_float();
-        if (value == std::numeric_limits<float>::infinity()) {
+        if (value == numeric_limits<float>::infinity()) {
           return "static_cast<float>(::google::protobuf::internal::Infinity())";
-        } else if (value == -std::numeric_limits<float>::infinity()) {
+        } else if (value == -numeric_limits<float>::infinity()) {
           return "static_cast<float>(-::google::protobuf::internal::Infinity())";
         } else if (value != value) {
           return "static_cast<float>(::google::protobuf::internal::NaN())";
         } else {
-          std::string float_value = SimpleFtoa(value);
+          string float_value = SimpleFtoa(value);
           // If floating point value contains a period (.) or an exponent
           // (either E or e), then append suffix 'f' to make it a float
           // literal.
-          if (float_value.find_first_of(".eE") != std::string::npos) {
+          if (float_value.find_first_of(".eE") != string::npos) {
             float_value.push_back('f');
           }
           return float_value;
@@ -291,8 +321,9 @@ std::string DefaultValue(const FieldDescriptor* field) {
           ClassName(field->enum_type(), true),
           field->default_value_enum()->number());
     case FieldDescriptor::CPPTYPE_STRING:
-      return "\"" + EscapeTrigraphs(protobuf::CEscape(field->default_value_string())) +
-             "\"";
+      return "\"" + EscapeTrigraphs(
+        CEscape(field->default_value_string())) +
+        "\"";
     case FieldDescriptor::CPPTYPE_MESSAGE:
       return FieldMessageTypeName(field) + "::default_instance()";
   }
@@ -304,8 +335,8 @@ std::string DefaultValue(const FieldDescriptor* field) {
 }
 
 // Convert a file name into a valid identifier.
-std::string FilenameIdentifier(const std::string& filename) {
-  std::string result;
+string FilenameIdentifier(const string& filename) {
+  string result;
   for (int i = 0; i < filename.size(); i++) {
     if (ascii_isalnum(filename[i])) {
       result.push_back(filename[i]);
@@ -321,23 +352,84 @@ std::string FilenameIdentifier(const std::string& filename) {
 }
 
 // Return the name of the AddDescriptors() function for a given file.
-std::string GlobalAddDescriptorsName(const std::string& filename) {
+string GlobalAddDescriptorsName(const string& filename) {
   return "protobuf_AddDesc_" + FilenameIdentifier(filename);
 }
 
 // Return the name of the AssignDescriptors() function for a given file.
-std::string GlobalAssignDescriptorsName(const std::string& filename) {
+string GlobalAssignDescriptorsName(const string& filename) {
   return "protobuf_AssignDesc_" + FilenameIdentifier(filename);
 }
 
 // Return the name of the ShutdownFile() function for a given file.
-std::string GlobalShutdownFileName(const std::string& filename) {
+string GlobalShutdownFileName(const string& filename) {
   return "protobuf_ShutdownFile_" + FilenameIdentifier(filename);
 }
 
 // Escape C++ trigraphs by escaping question marks to \?
-std::string EscapeTrigraphs(const std::string& to_escape) {
-  return protobuf::StringReplace(to_escape, "?", "\\?", true);
+string EscapeTrigraphs(const string& to_escape) {
+  return StringReplace(to_escape, "?", "\\?", true);
+}
+
+bool StaticInitializersForced(const FileDescriptor* file) {
+  if (HasDescriptorMethods(file) || file->extension_count() > 0) {
+    return true;
+  }
+  for (int i = 0; i < file->message_type_count(); ++i) {
+    if (HasExtension(file->message_type(i))) {
+      return true;
+    }
+  }
+  return false;
+}
+
+void PrintHandlingOptionalStaticInitializers(
+    const FileDescriptor* file, io::Printer* printer,
+    const char* with_static_init, const char* without_static_init,
+    const char* var1, const string& val1,
+    const char* var2, const string& val2) {
+  map<string, string> vars;
+  if (var1) {
+    vars[var1] = val1;
+  }
+  if (var2) {
+    vars[var2] = val2;
+  }
+  PrintHandlingOptionalStaticInitializers(
+      vars, file, printer, with_static_init, without_static_init);
+}
+
+void PrintHandlingOptionalStaticInitializers(
+    const map<string, string>& vars, const FileDescriptor* file,
+    io::Printer* printer, const char* with_static_init,
+    const char* without_static_init) {
+  if (StaticInitializersForced(file)) {
+    printer->Print(vars, with_static_init);
+  } else {
+    printer->Print(vars, (string(
+      "#ifdef GOOGLE_PROTOBUF_NO_STATIC_INITIALIZER\n") +
+      without_static_init +
+      "#else\n" +
+      with_static_init +
+      "#endif\n").c_str());
+  }
+}
+
+
+static bool HasEnumDefinitions(const Descriptor* message_type) {
+  if (message_type->enum_type_count() > 0) return true;
+  for (int i = 0; i < message_type->nested_type_count(); ++i) {
+    if (HasEnumDefinitions(message_type->nested_type(i))) return true;
+  }
+  return false;
+}
+
+bool HasEnumDefinitions(const FileDescriptor* file) {
+  if (file->enum_type_count() > 0) return true;
+  for (int i = 0; i < file->message_type_count(); ++i) {
+    if (HasEnumDefinitions(file->message_type(i))) return true;
+  }
+  return false;
 }
 
 }  // namespace cpp

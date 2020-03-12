@@ -41,16 +41,14 @@
 #define GOOGLE_PROTOBUF_WIRE_FORMAT_LITE_H__
 
 #include <string>
+#include <google/protobuf/stubs/common.h>
 #include <google/protobuf/message_lite.h>
+#include <google/protobuf/io/coded_stream.h>  // for CodedOutputStream::Varint32Size
 
 namespace google {
 
 namespace protobuf {
   template <typename T> class RepeatedField;  // repeated_field.h
-  namespace io {
-    class CodedInputStream;             // coded_stream.h
-    class CodedOutputStream;            // coded_stream.h
-  }
 }
 
 namespace protobuf {
@@ -288,8 +286,8 @@ class LIBPROTOBUF_EXPORT WireFormatLite {
                                      bool (*is_valid)(int),
                                      RepeatedField<int>* value);
 
-  static bool ReadString(input, std::string* value);
-  static bool ReadBytes (input, std::string* value);
+  static bool ReadString(input, string* value);
+  static bool ReadBytes (input, string* value);
 
   static inline bool ReadGroup  (field_number, input, MessageLite* value);
   static inline bool ReadMessage(input, MessageLite* value);
@@ -340,8 +338,8 @@ class LIBPROTOBUF_EXPORT WireFormatLite {
   static void WriteBool    (field_number,   bool value, output);
   static void WriteEnum    (field_number,    int value, output);
 
-  static void WriteString(field_number, const std::string& value, output);
-  static void WriteBytes (field_number, const std::string& value, output);
+  static void WriteString(field_number, const string& value, output);
+  static void WriteBytes (field_number, const string& value, output);
 
   static void WriteGroup(
     field_number, const MessageLite& value, output);
@@ -417,9 +415,9 @@ class LIBPROTOBUF_EXPORT WireFormatLite {
     field_number, int value, output) INL;
 
   static inline uint8* WriteStringToArray(
-    field_number, const std::string& value, output) INL;
+    field_number, const string& value, output) INL;
   static inline uint8* WriteBytesToArray(
-    field_number, const std::string& value, output) INL;
+    field_number, const string& value, output) INL;
 
   static inline uint8* WriteGroupToArray(
       field_number, const MessageLite& value, output) INL;
@@ -463,8 +461,8 @@ class LIBPROTOBUF_EXPORT WireFormatLite {
   static const int kDoubleSize   = 8;
   static const int kBoolSize     = 1;
 
-  static inline int StringSize(const std::string& value);
-  static inline int BytesSize (const std::string& value);
+  static inline int StringSize(const string& value);
+  static inline int BytesSize (const string& value);
 
   static inline int GroupSize  (const MessageLite& value);
   static inline int MessageSize(const MessageLite& value);
@@ -476,6 +474,10 @@ class LIBPROTOBUF_EXPORT WireFormatLite {
   static inline int GroupSizeNoVirtual  (const MessageType& value);
   template<typename MessageType>
   static inline int MessageSizeNoVirtual(const MessageType& value);
+
+  // Given the length of data, calculate the byte size of the data on the
+  // wire if we encode the data as a length delimited field.
+  static inline int LengthDelimitedSize(int length);
 
  private:
   // A helper method for the repeated primitive reader. This method has

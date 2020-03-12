@@ -45,26 +45,26 @@ CodeGenerator::~CodeGenerator() {}
 GeneratorContext::~GeneratorContext() {}
 
 io::ZeroCopyOutputStream* GeneratorContext::OpenForInsert(
-    const std::string& filename, const std::string& insertion_point) {
+    const string& filename, const string& insertion_point) {
   GOOGLE_LOG(FATAL) << "This GeneratorContext does not support insertion.";
   return NULL;  // make compiler happy
 }
 
 void GeneratorContext::ListParsedFiles(
-    std::vector<const FileDescriptor*>* output) {
+    vector<const FileDescriptor*>* output) {
   GOOGLE_LOG(FATAL) << "This GeneratorContext does not support ListParsedFiles";
 }
 
 // Parses a set of comma-delimited name/value pairs.
-void ParseGeneratorParameter(const std::string& text,
-                             std::vector<std::pair<std::string, std::string> >* output) {
-  std::vector<std::string> parts;
-  protobuf::SplitStringUsing(text, ",", &parts);
+void ParseGeneratorParameter(const string& text,
+                             vector<pair<string, string> >* output) {
+  vector<string> parts;
+  SplitStringUsing(text, ",", &parts);
 
   for (int i = 0; i < parts.size(); i++) {
-    std::string::size_type equals_pos = parts[i].find_first_of('=');
-    std::pair<std::string, std::string> value;
-    if (equals_pos == std::string::npos) {
+    string::size_type equals_pos = parts[i].find_first_of('=');
+    pair<string, string> value;
+    if (equals_pos == string::npos) {
       value.first = parts[i];
       value.second = "";
     } else {

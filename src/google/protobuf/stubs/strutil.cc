@@ -84,7 +84,7 @@ inline bool isprint(char c) {
 //    Replaces any occurrence of the character 'remove' (or the characters
 //    in 'remove') with the character 'replacewith'.
 // ----------------------------------------------------------------------
-void StripString(std::string* s, const char* remove, char replacewith) {
+void StripString(string* s, const char* remove, char replacewith) {
   const char * str_start = s->c_str();
   const char * str = str_start;
   for (str = strpbrk(str, remove);
@@ -101,19 +101,19 @@ void StripString(std::string* s, const char* remove, char replacewith) {
 //    it only replaces the first instance of "old."
 // ----------------------------------------------------------------------
 
-void StringReplace(const std::string& s, const std::string& oldsub,
-                   const std::string& newsub, bool replace_all,
-                   std::string* res) {
+void StringReplace(const string& s, const string& oldsub,
+                   const string& newsub, bool replace_all,
+                   string* res) {
   if (oldsub.empty()) {
     res->append(s);  // if empty, append the given string.
     return;
   }
 
-  std::string::size_type start_pos = 0;
-  std::string::size_type pos;
+  string::size_type start_pos = 0;
+  string::size_type pos;
   do {
     pos = s.find(oldsub, start_pos);
-    if (pos == std::string::npos) {
+    if (pos == string::npos) {
       break;
     }
     res->append(s, start_pos, pos - start_pos);
@@ -132,9 +132,9 @@ void StringReplace(const std::string& s, const std::string& oldsub,
 //    happened or not.
 // ----------------------------------------------------------------------
 
-std::string StringReplace(const std::string& s, const std::string& oldsub,
-                     const std::string& newsub, bool replace_all) {
-  std::string ret;
+string StringReplace(const string& s, const string& oldsub,
+                     const string& newsub, bool replace_all) {
+  string ret;
   StringReplace(s, oldsub, newsub, replace_all, &ret);
   return ret;
 }
@@ -149,7 +149,7 @@ std::string StringReplace(const std::string& s, const std::string& oldsub,
 // ----------------------------------------------------------------------
 template <typename ITR>
 static inline
-void SplitStringToIteratorUsing(const std::string& full,
+void SplitStringToIteratorUsing(const string& full,
                                 const char* delim,
                                 ITR& result) {
   // Optimize the common case where delim is a single character.
@@ -163,17 +163,17 @@ void SplitStringToIteratorUsing(const std::string& full,
       } else {
         const char* start = p;
         while (++p != end && *p != c);
-        *result++ = std::string(start, p - start);
+        *result++ = string(start, p - start);
       }
     }
     return;
   }
 
-  std::string::size_type begin_index, end_index;
+  string::size_type begin_index, end_index;
   begin_index = full.find_first_not_of(delim);
-  while (begin_index != std::string::npos) {
+  while (begin_index != string::npos) {
     end_index = full.find_first_of(delim, begin_index);
-    if (end_index == std::string::npos) {
+    if (end_index == string::npos) {
       *result++ = full.substr(begin_index);
       return;
     }
@@ -182,11 +182,49 @@ void SplitStringToIteratorUsing(const std::string& full,
   }
 }
 
-void SplitStringUsing(const std::string& full,
+void SplitStringUsing(const string& full,
                       const char* delim,
-                      std::vector<std::string>* result) {
-  std::back_insert_iterator< std::vector<std::string> > it(*result);
+                      vector<string>* result) {
+  back_insert_iterator< vector<string> > it(*result);
   SplitStringToIteratorUsing(full, delim, it);
+}
+
+// Split a string using a character delimiter. Append the components
+// to 'result'.  If there are consecutive delimiters, this function
+// will return corresponding empty strings. The string is split into
+// at most the specified number of pieces greedily. This means that the
+// last piece may possibly be split further. To split into as many pieces
+// as possible, specify 0 as the number of pieces.
+//
+// If "full" is the empty string, yields an empty string as the only value.
+//
+// If "pieces" is negative for some reason, it returns the whole string
+// ----------------------------------------------------------------------
+template <typename StringType, typename ITR>
+static inline
+void SplitStringToIteratorAllowEmpty(const StringType& full,
+                                     const char* delim,
+                                     int pieces,
+                                     ITR& result) {
+  string::size_type begin_index, end_index;
+  begin_index = 0;
+
+  for (int i = 0; (i < pieces-1) || (pieces == 0); i++) {
+    end_index = full.find_first_of(delim, begin_index);
+    if (end_index == string::npos) {
+      *result++ = full.substr(begin_index);
+      return;
+    }
+    *result++ = full.substr(begin_index, (end_index - begin_index));
+    begin_index = end_index + 1;
+  }
+  *result++ = full.substr(begin_index);
+}
+
+void SplitStringAllowEmpty(const string& full, const char* delim,
+                           vector<string>* result) {
+  back_insert_iterator<vector<string> > it(*result);
+  SplitStringToIteratorAllowEmpty(full, delim, 0, it);
 }
 
 // ----------------------------------------------------------------------
@@ -199,7 +237,7 @@ template <class ITERATOR>
 static void JoinStringsIterator(const ITERATOR& start,
                                 const ITERATOR& end,
                                 const char* delim,
-                                std::string* result) {
+                                string* result) {
   GOOGLE_CHECK(result != NULL);
   result->clear();
   int delim_length = strlen(delim);
@@ -223,9 +261,9 @@ static void JoinStringsIterator(const ITERATOR& start,
   }
 }
 
-void JoinStrings(const std::vector<std::string>& components,
+void JoinStrings(const vector<string>& components,
                  const char* delim,
-                 std::string * result) {
+                 string * result) {
   JoinStringsIterator(components.begin(), components.end(), delim, result);
 }
 
@@ -263,7 +301,7 @@ int UnescapeCEscapeSequences(const char* source, char* dest) {
 }
 
 int UnescapeCEscapeSequences(const char* source, char* dest,
-                             std::vector<std::string> *errors) {
+                             vector<string> *errors) {
   GOOGLE_DCHECK(errors == NULL) << "Error reporting not implemented.";
 
   char* d = dest;
@@ -319,7 +357,7 @@ int UnescapeCEscapeSequences(const char* source, char* dest,
             ch = (ch << 4) + hex_digit_to_int(*++p);
           if (ch > 0xFF)
             LOG_STRING(ERROR, errors) << "Value of " <<
-              "\\" << std::string(hex_start, p+1-hex_start) << " exceeds 8 bits";
+              "\\" << string(hex_start, p+1-hex_start) << " exceeds 8 bits";
           *d++ = ch;
           break;
         }
@@ -394,12 +432,12 @@ int UnescapeCEscapeSequences(const char* source, char* dest,
 //    In the first and second calls, the length of dest is returned. In the
 //    the third call, the new string is returned.
 // ----------------------------------------------------------------------
-int UnescapeCEscapeString(const std::string& src, std::string* dest) {
+int UnescapeCEscapeString(const string& src, string* dest) {
   return UnescapeCEscapeString(src, dest, NULL);
 }
 
-int UnescapeCEscapeString(const std::string& src, std::string* dest,
-                          std::vector<std::string> *errors) {
+int UnescapeCEscapeString(const string& src, string* dest,
+                          vector<string> *errors) {
   scoped_array<char> unescaped(new char[src.size() + 1]);
   int len = UnescapeCEscapeSequences(src.c_str(), unescaped.get(), errors);
   GOOGLE_CHECK(dest);
@@ -407,10 +445,10 @@ int UnescapeCEscapeString(const std::string& src, std::string* dest,
   return len;
 }
 
-std::string UnescapeCEscapeString(const std::string& src) {
+string UnescapeCEscapeString(const string& src) {
   scoped_array<char> unescaped(new char[src.size() + 1]);
   int len = UnescapeCEscapeSequences(src.c_str(), unescaped.get(), NULL);
-  return std::string(unescaped.get(), len);
+  return string(unescaped.get(), len);
 }
 
 // ----------------------------------------------------------------------
@@ -484,33 +522,33 @@ int CEscapeString(const char* src, int src_len, char* dest, int dest_len) {
 //
 //    Currently only \n, \r, \t, ", ', \ and !isprint() chars are escaped.
 // ----------------------------------------------------------------------
-std::string CEscape(const std::string& src) {
+string CEscape(const string& src) {
   const int dest_length = src.size() * 4 + 1; // Maximum possible expansion
   scoped_array<char> dest(new char[dest_length]);
   const int len = CEscapeInternal(src.data(), src.size(),
                                   dest.get(), dest_length, false, false);
   GOOGLE_DCHECK_GE(len, 0);
-  return std::string(dest.get(), len);
+  return string(dest.get(), len);
 }
 
 namespace strings {
 
-std::string Utf8SafeCEscape(const std::string& src) {
+string Utf8SafeCEscape(const string& src) {
   const int dest_length = src.size() * 4 + 1; // Maximum possible expansion
   scoped_array<char> dest(new char[dest_length]);
   const int len = CEscapeInternal(src.data(), src.size(),
                                   dest.get(), dest_length, false, true);
   GOOGLE_DCHECK_GE(len, 0);
-  return std::string(dest.get(), len);
+  return string(dest.get(), len);
 }
 
-std::string CHexEscape(const std::string& src) {
+string CHexEscape(const string& src) {
   const int dest_length = src.size() * 4 + 1; // Maximum possible expansion
   scoped_array<char> dest(new char[dest_length]);
   const int len = CEscapeInternal(src.data(), src.size(),
                                   dest.get(), dest_length, true, false);
   GOOGLE_DCHECK_GE(len, 0);
-  return std::string(dest.get(), len);
+  return string(dest.get(), len);
 }
 
 }  // namespace strings
@@ -886,44 +924,44 @@ char* FastInt64ToBufferLeft(int64 i, char* buffer) {
 //    Return value: string
 // ----------------------------------------------------------------------
 
-std::string SimpleItoa(int i) {
+string SimpleItoa(int i) {
   char buffer[kFastToBufferSize];
   return (sizeof(i) == 4) ?
     FastInt32ToBuffer(i, buffer) :
     FastInt64ToBuffer(i, buffer);
 }
 
-std::string SimpleItoa(unsigned int i) {
+string SimpleItoa(unsigned int i) {
   char buffer[kFastToBufferSize];
-  return std::string(buffer, (sizeof(i) == 4) ?
+  return string(buffer, (sizeof(i) == 4) ?
     FastUInt32ToBufferLeft(i, buffer) :
     FastUInt64ToBufferLeft(i, buffer));
 }
 
-std::string SimpleItoa(long i) {
+string SimpleItoa(long i) {
   char buffer[kFastToBufferSize];
   return (sizeof(i) == 4) ?
     FastInt32ToBuffer(i, buffer) :
     FastInt64ToBuffer(i, buffer);
 }
 
-std::string SimpleItoa(unsigned long i) {
+string SimpleItoa(unsigned long i) {
   char buffer[kFastToBufferSize];
-  return std::string(buffer, (sizeof(i) == 4) ?
+  return string(buffer, (sizeof(i) == 4) ?
     FastUInt32ToBufferLeft(i, buffer) :
     FastUInt64ToBufferLeft(i, buffer));
 }
 
-std::string SimpleItoa(long long i) {
+string SimpleItoa(long long i) {
   char buffer[kFastToBufferSize];
   return (sizeof(i) == 4) ?
     FastInt32ToBuffer(i, buffer) :
     FastInt64ToBuffer(i, buffer);
 }
 
-std::string SimpleItoa(unsigned long long i) {
+string SimpleItoa(unsigned long long i) {
   char buffer[kFastToBufferSize];
-  return std::string(buffer, (sizeof(i) == 4) ?
+  return string(buffer, (sizeof(i) == 4) ?
     FastUInt32ToBufferLeft(i, buffer) :
     FastUInt64ToBufferLeft(i, buffer));
 }
@@ -969,12 +1007,12 @@ std::string SimpleItoa(unsigned long long i) {
 //    implementation.
 // ----------------------------------------------------------------------
 
-std::string SimpleDtoa(double value) {
+string SimpleDtoa(double value) {
   char buffer[kDoubleToBufferSize];
   return DoubleToBuffer(value, buffer);
 }
 
-std::string SimpleFtoa(float value) {
+string SimpleFtoa(float value) {
   char buffer[kFloatToBufferSize];
   return FloatToBuffer(value, buffer);
 }
@@ -1019,10 +1057,10 @@ char* DoubleToBuffer(double value, char* buffer) {
   // this assert.
   GOOGLE_COMPILE_ASSERT(DBL_DIG < 20, DBL_DIG_is_too_big);
 
-  if (value == std::numeric_limits<double>::infinity()) {
+  if (value == numeric_limits<double>::infinity()) {
     strcpy(buffer, "inf");
     return buffer;
-  } else if (value == -std::numeric_limits<double>::infinity()) {
+  } else if (value == -numeric_limits<double>::infinity()) {
     strcpy(buffer, "-inf");
     return buffer;
   } else if (IsNaN(value)) {
@@ -1074,10 +1112,10 @@ char* FloatToBuffer(float value, char* buffer) {
   // this assert.
   GOOGLE_COMPILE_ASSERT(FLT_DIG < 10, FLT_DIG_is_too_big);
 
-  if (value == std::numeric_limits<double>::infinity()) {
+  if (value == numeric_limits<double>::infinity()) {
     strcpy(buffer, "inf");
     return buffer;
-  } else if (value == -std::numeric_limits<double>::infinity()) {
+  } else if (value == -numeric_limits<double>::infinity()) {
     strcpy(buffer, "-inf");
     return buffer;
   } else if (IsNaN(value)) {
@@ -1113,7 +1151,7 @@ char* FloatToBuffer(float value, char* buffer) {
 // Returns a string identical to *input except that the character pointed to
 // by radix_pos (which should be '.') is replaced with the locale-specific
 // radix character.
-std::string LocalizeRadix(const char* input, const char* radix_pos) {
+string LocalizeRadix(const char* input, const char* radix_pos) {
   // Determine the locale-specific radix character by calling sprintf() to
   // print the number 1.5, then stripping off the digits.  As far as I can
   // tell, this is the only portable, thread-safe way to get the C library
@@ -1126,7 +1164,7 @@ std::string LocalizeRadix(const char* input, const char* radix_pos) {
   GOOGLE_CHECK_LE(size, 6);
 
   // Now replace the '.' in the input with it.
-  std::string result;
+  string result;
   result.reserve(strlen(input) + size - 3);
   result.append(input, radix_pos);
   result.append(temp + 1, size - 2);
@@ -1149,7 +1187,7 @@ double NoLocaleStrtod(const char* text, char** original_endptr) {
   // Parsing halted on a '.'.  Perhaps we're in a different locale?  Let's
   // try to replace the '.' with a locale-specific radix character and
   // try again.
-  std::string localized = LocalizeRadix(text, temp_endptr);
+  string localized = LocalizeRadix(text, temp_endptr);
   const char* localized_cstr = localized.c_str();
   char* localized_endptr;
   result = strtod(localized_cstr, &localized_endptr);

@@ -109,7 +109,7 @@ int FieldSpaceUsed(const FieldDescriptor* field) {
         switch (field->options().ctype()) {
           default:  // TODO(kenton):  Support other string reps.
           case FieldOptions::STRING:
-            return sizeof(RepeatedPtrField<std::string>);
+            return sizeof(RepeatedPtrField<string>);
         }
         break;
     }
@@ -123,13 +123,15 @@ int FieldSpaceUsed(const FieldDescriptor* field) {
       case FD::CPPTYPE_FLOAT  : return sizeof(float   );
       case FD::CPPTYPE_BOOL   : return sizeof(bool    );
       case FD::CPPTYPE_ENUM   : return sizeof(int     );
-      case FD::CPPTYPE_MESSAGE: return sizeof(Message*);
+
+      case FD::CPPTYPE_MESSAGE:
+        return sizeof(Message*);
 
       case FD::CPPTYPE_STRING:
         switch (field->options().ctype()) {
           default:  // TODO(kenton):  Support other string reps.
           case FieldOptions::STRING:
-            return sizeof(std::string*);
+            return sizeof(string*);
         }
         break;
     }
@@ -178,7 +180,17 @@ class DynamicMessage : public Message {
     //   important (the prototype must be deleted *before* the offsets).
     scoped_array<int> offsets;
     scoped_ptr<const GeneratedMessageReflection> reflection;
-    scoped_ptr<const DynamicMessage> prototype;
+    // Don't use a scoped_ptr to hold the prototype: the destructor for
+    // DynamicMessage needs to know whether it is the prototype, and does so by
+    // looking back at this field. This would assume details about the
+    // implementation of scoped_ptr.
+    const DynamicMessage* prototype;
+
+    TypeInfo() : prototype(NULL) {}
+
+    ~TypeInfo() {
+      delete prototype;
+    }
   };
 
   DynamicMessage(const TypeInfo* type_info);
@@ -275,16 +287,16 @@ DynamicMessage::DynamicMessage(const TypeInfo* type_info)
           case FieldOptions::STRING:
             if (!field->is_repeated()) {
               if (is_prototype()) {
-                new(field_ptr) const std::string*(&field->default_value_string());
+                new(field_ptr) const string*(&field->default_value_string());
               } else {
-                std::string* default_value =
-                  *reinterpret_cast<std::string* const*>(
+                string* default_value =
+                  *reinterpret_cast<string* const*>(
                     type_info_->prototype->OffsetToPointer(
                       type_info_->offsets[i]));
-                new(field_ptr) std::string*(default_value);
+                new(field_ptr) string*(default_value);
               }
             } else {
-              new(field_ptr) RepeatedPtrField<std::string>();
+              new(field_ptr) RepeatedPtrField<string>();
             }
             break;
         }
@@ -345,8 +357,8 @@ DynamicMessage::~DynamicMessage() {
           switch (field->options().ctype()) {
             default:  // TODO(kenton):  Support other string reps.
             case FieldOptions::STRING:
-              reinterpret_cast<RepeatedPtrField<std::string>*>(field_ptr)
-                  ->~RepeatedPtrField<std::string>();
+              reinterpret_cast<RepeatedPtrField<string>*>(field_ptr)
+                  ->~RepeatedPtrField<string>();
               break;
           }
           break;
@@ -361,18 +373,19 @@ DynamicMessage::~DynamicMessage() {
       switch (field->options().ctype()) {
         default:  // TODO(kenton):  Support other string reps.
         case FieldOptions::STRING: {
-          std::string* ptr = *reinterpret_cast<std::string**>(field_ptr);
+          string* ptr = *reinterpret_cast<string**>(field_ptr);
           if (ptr != &field->default_value_string()) {
             delete ptr;
           }
           break;
         }
       }
-    } else if ((field->cpp_type() == FieldDescriptor::CPPTYPE_MESSAGE) &&
-               !is_prototype()) {
-      Message* message = *reinterpret_cast<Message**>(field_ptr);
-      if (message != NULL) {
-        delete message;
+    } else if (field->cpp_type() == FieldDescriptor::CPPTYPE_MESSAGE) {
+      if (!is_prototype()) {
+        Message* message = *reinterpret_cast<Message**>(field_ptr);
+        if (message != NULL) {
+          delete message;
+        }
       }
     }
   }
@@ -403,7 +416,7 @@ void DynamicMessage::CrossLinkPrototypes() {
 }
 
 Message* DynamicMessage::New() const {
-  void* new_base = reinterpret_cast<uint8*>(operator new(type_info_->size));
+  void* new_base = operator new(type_info_->size);
   memset(new_base, 0, type_info_->size);
   return new(new_base) DynamicMessage(type_info_);
 }
@@ -465,7 +478,7 @@ const Message* DynamicMessageFactory::GetPrototypeNoLock(
   const DynamicMessage::TypeInfo** target = &prototypes_->map_[type];
   if (*target != NULL) {
     // Already exists.
-    return (*target)->prototype.get();
+    return (*target)->prototype;
   }
 
   DynamicMessage::TypeInfo* type_info = new DynamicMessage::TypeInfo;
@@ -514,7 +527,7 @@ const Message* DynamicMessageFactory::GetPrototypeNoLock(
   for (int i = 0; i < type->field_count(); i++) {
     // Make sure field is aligned to avoid bus errors.
     int field_size = FieldSpaceUsed(type->field(i));
-    size = AlignTo(size, std::min(kSafeAlignment, field_size));
+    size = AlignTo(size, min(kSafeAlignment, field_size));
     offsets[i] = size;
     size += field_size;
   }
@@ -533,13 +546,13 @@ const Message* DynamicMessageFactory::GetPrototypeNoLock(
   void* base = operator new(size);
   memset(base, 0, size);
   DynamicMessage* prototype = new(base) DynamicMessage(type_info);
-  type_info->prototype.reset(prototype);
+  type_info->prototype = prototype;
 
   // Construct the reflection object.
   type_info->reflection.reset(
     new GeneratedMessageReflection(
       type_info->type,
-      type_info->prototype.get(),
+      type_info->prototype,
       type_info->offsets.get(),
       type_info->has_bits_offset,
       type_info->unknown_fields_offset,

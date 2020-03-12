@@ -33,6 +33,7 @@
 //  Sanjay Ghemawat, Jeff Dean, and others.
 
 #include <google/protobuf/compiler/java/java_service.h>
+#include <google/protobuf/compiler/java/java_doc_comment.h>
 #include <google/protobuf/compiler/java/java_helpers.h>
 #include <google/protobuf/io/printer.h>
 #include <google/protobuf/descriptor.pb.h>
@@ -50,6 +51,7 @@ ServiceGenerator::~ServiceGenerator() {}
 
 void ServiceGenerator::Generate(io::Printer* printer) {
   bool is_own_file = descriptor_->file()->options().java_multiple_files();
+  WriteServiceDocComment(printer, descriptor_);
   printer->Print(
     "public $static$ abstract class $classname$\n"
     "    implements com.google.protobuf.Service {\n",
@@ -85,6 +87,12 @@ void ServiceGenerator::Generate(io::Printer* printer) {
   GenerateGetPrototype(RESPONSE, printer);
   GenerateStub(printer);
   GenerateBlockingStub(printer);
+
+  // Add an insertion point.
+  printer->Print(
+    "\n"
+    "// @@protoc_insertion_point(class_scope:$full_name$)\n",
+    "full_name", descriptor_->full_name());
 
   printer->Outdent();
   printer->Print("}\n\n");
@@ -157,6 +165,7 @@ void ServiceGenerator::GenerateNewReflectiveBlockingServiceMethod(
 void ServiceGenerator::GenerateAbstractMethods(io::Printer* printer) {
   for (int i = 0; i < descriptor_->method_count(); i++) {
     const MethodDescriptor* method = descriptor_->method(i);
+    WriteMethodDocComment(printer, method);
     GenerateMethodSignature(printer, method, IS_ABSTRACT);
     printer->Print(";\n\n");
   }
@@ -182,7 +191,7 @@ void ServiceGenerator::GenerateCallMethod(io::Printer* printer) {
 
   for (int i = 0; i < descriptor_->method_count(); i++) {
     const MethodDescriptor* method = descriptor_->method(i);
-    std::map<std::string, std::string> vars;
+    map<string, string> vars;
     vars["index"] = SimpleItoa(i);
     vars["method"] = UnderscoresToCamelCase(method);
     vars["input"] = ClassName(method->input_type());
@@ -227,7 +236,7 @@ void ServiceGenerator::GenerateCallBlockingMethod(io::Printer* printer) {
 
   for (int i = 0; i < descriptor_->method_count(); i++) {
     const MethodDescriptor* method = descriptor_->method(i);
-    std::map<std::string, std::string> vars;
+    map<string, string> vars;
     vars["index"] = SimpleItoa(i);
     vars["method"] = UnderscoresToCamelCase(method);
     vars["input"] = ClassName(method->input_type());
@@ -272,7 +281,7 @@ void ServiceGenerator::GenerateGetPrototype(RequestOrResponse which,
 
   for (int i = 0; i < descriptor_->method_count(); i++) {
     const MethodDescriptor* method = descriptor_->method(i);
-    std::map<std::string, std::string> vars;
+    map<string, string> vars;
     vars["index"] = SimpleItoa(i);
     vars["type"] = ClassName(
       (which == REQUEST) ? method->input_type() : method->output_type());
@@ -324,7 +333,7 @@ void ServiceGenerator::GenerateStub(io::Printer* printer) {
     printer->Print(" {\n");
     printer->Indent();
 
-    std::map<std::string, std::string> vars;
+    map<string, string> vars;
     vars["index"] = SimpleItoa(i);
     vars["output"] = ClassName(method->output_type());
     printer->Print(vars,
@@ -388,7 +397,7 @@ void ServiceGenerator::GenerateBlockingStub(io::Printer* printer) {
     printer->Print(" {\n");
     printer->Indent();
 
-    std::map<std::string, std::string> vars;
+    map<string, string> vars;
     vars["index"] = SimpleItoa(i);
     vars["output"] = ClassName(method->output_type());
     printer->Print(vars,
@@ -411,7 +420,7 @@ void ServiceGenerator::GenerateBlockingStub(io::Printer* printer) {
 void ServiceGenerator::GenerateMethodSignature(io::Printer* printer,
                                                const MethodDescriptor* method,
                                                IsAbstract is_abstract) {
-  std::map<std::string, std::string> vars;
+  map<string, string> vars;
   vars["name"] = UnderscoresToCamelCase(method);
   vars["input"] = ClassName(method->input_type());
   vars["output"] = ClassName(method->output_type());
@@ -426,7 +435,7 @@ void ServiceGenerator::GenerateMethodSignature(io::Printer* printer,
 void ServiceGenerator::GenerateBlockingMethodSignature(
     io::Printer* printer,
     const MethodDescriptor* method) {
-  std::map<std::string, std::string> vars;
+  map<string, string> vars;
   vars["method"] = UnderscoresToCamelCase(method);
   vars["input"] = ClassName(method->input_type());
   vars["output"] = ClassName(method->output_type());

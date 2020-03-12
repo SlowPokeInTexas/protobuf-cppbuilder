@@ -46,7 +46,8 @@ namespace cpp {
 
 class PrimitiveFieldGenerator : public FieldGenerator {
  public:
-  explicit PrimitiveFieldGenerator(const FieldDescriptor* descriptor);
+  explicit PrimitiveFieldGenerator(const FieldDescriptor* descriptor,
+                                   const Options& options);
   ~PrimitiveFieldGenerator();
 
   // implements FieldGenerator ---------------------------------------
@@ -64,14 +65,15 @@ class PrimitiveFieldGenerator : public FieldGenerator {
 
  private:
   const FieldDescriptor* descriptor_;
-  std::map<std::string, std::string> variables_;
+  map<string, string> variables_;
 
   GOOGLE_DISALLOW_EVIL_CONSTRUCTORS(PrimitiveFieldGenerator);
 };
 
 class RepeatedPrimitiveFieldGenerator : public FieldGenerator {
  public:
-  explicit RepeatedPrimitiveFieldGenerator(const FieldDescriptor* descriptor);
+  explicit RepeatedPrimitiveFieldGenerator(const FieldDescriptor* descriptor,
+                                           const Options& options);
   ~RepeatedPrimitiveFieldGenerator();
 
   // implements FieldGenerator ---------------------------------------
@@ -90,7 +92,7 @@ class RepeatedPrimitiveFieldGenerator : public FieldGenerator {
 
  private:
   const FieldDescriptor* descriptor_;
-  std::map<std::string, std::string> variables_;
+  map<string, string> variables_;
 
   GOOGLE_DISALLOW_EVIL_CONSTRUCTORS(RepeatedPrimitiveFieldGenerator);
 };

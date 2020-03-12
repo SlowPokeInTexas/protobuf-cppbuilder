@@ -33,6 +33,7 @@
 //  Sanjay Ghemawat, Jeff Dean, and others.
 
 #include <google/protobuf/compiler/java/java_extension.h>
+#include <google/protobuf/compiler/java/java_doc_comment.h>
 #include <google/protobuf/compiler/java/java_helpers.h>
 #include <google/protobuf/stubs/strutil.h>
 #include <google/protobuf/io/printer.h>
@@ -88,9 +89,9 @@ ExtensionGenerator::~ExtensionGenerator() {}
 
 // Initializes the vars referenced in the generated code templates.
 void InitTemplateVars(const FieldDescriptor* descriptor,
-                      const std::string& scope,
-                      std::map<std::string, std::string>* vars_pointer) {
-  std::map<std::string, std::string> &vars = *vars_pointer;
+                      const string& scope,
+                      map<string, string>* vars_pointer) {
+  map<string, string> &vars = *vars_pointer;
   vars["scope"] = scope;
   vars["name"] = UnderscoresToCamelCase(descriptor);
   vars["containing_type"] = ClassName(descriptor->containing_type());
@@ -98,14 +99,14 @@ void InitTemplateVars(const FieldDescriptor* descriptor,
   vars["constant_name"] = FieldConstantName(descriptor);
   vars["index"] = SimpleItoa(descriptor->index());
   vars["default"] =
-      descriptor->is_repeated() ? std::string() : std::string(DefaultValue(descriptor));
+      descriptor->is_repeated() ? "" : DefaultValue(descriptor);
   vars["type_constant"] = TypeName(GetType(descriptor));
   vars["packed"] = descriptor->options().packed() ? "true" : "false";
   vars["enum_map"] = "null";
   vars["prototype"] = "null";
 
   JavaType java_type = GetJavaType(descriptor);
-  std::string singular_type;
+  string singular_type;
   switch (java_type) {
     case JAVATYPE_MESSAGE:
       singular_type = ClassName(descriptor->message_type());
@@ -125,11 +126,12 @@ void InitTemplateVars(const FieldDescriptor* descriptor,
 }
 
 void ExtensionGenerator::Generate(io::Printer* printer) {
-  std::map<std::string, std::string> vars;
+  map<string, string> vars;
   InitTemplateVars(descriptor_, scope_, &vars);
   printer->Print(vars,
       "public static final int $constant_name$ = $number$;\n");
 
+  WriteFieldDocComment(printer, descriptor_);
   if (HasDescriptorMethods(descriptor_->file())) {
     // Non-lite extensions
     if (descriptor_->extension_scope() == NULL) {

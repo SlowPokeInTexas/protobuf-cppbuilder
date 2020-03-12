@@ -56,9 +56,9 @@ class LIBPROTOC_EXPORT JavaGenerator : public CodeGenerator {
 
   // implements CodeGenerator ----------------------------------------
   bool Generate(const FileDescriptor* file,
-                const std::string& parameter,
+                const string& parameter,
                 GeneratorContext* context,
-                std::string* error) const;
+                string* error) const;
 
  private:
   GOOGLE_DISALLOW_EVIL_CONSTRUCTORS(JavaGenerator);

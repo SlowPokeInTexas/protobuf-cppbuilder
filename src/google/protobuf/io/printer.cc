@@ -35,7 +35,6 @@
 #include <google/protobuf/io/printer.h>
 #include <google/protobuf/io/zero_copy_stream.h>
 #include <google/protobuf/stubs/common.h>
-#include <google/protobuf/stubs/strutil.h>
 
 namespace google {
 namespace protobuf {
@@ -51,13 +50,13 @@ Printer::Printer(ZeroCopyOutputStream* output, char variable_delimiter)
 }
 
 Printer::~Printer() {
-  // Only BackUp() if we're sure we've successfully called Next() at least once.
-  if (buffer_size_ > 0) {
+  // Only BackUp() if we have called Next() at least once and never failed.
+  if (buffer_size_ > 0 && !failed_) {
     output_->BackUp(buffer_size_);
   }
 }
 
-void Printer::Print(const std::map<std::string, std::string>& variables, const char* text) {
+void Printer::Print(const map<string, string>& variables, const char* text) {
   int size = strlen(text);
   int pos = 0;  // The number of bytes we've written so far.
 
@@ -87,13 +86,13 @@ void Printer::Print(const std::map<std::string, std::string>& variables, const c
       }
       int endpos = end - text;
 
-      std::string varname(text + pos, endpos - pos);
+      string varname(text + pos, endpos - pos);
       if (varname.empty()) {
         // Two delimiters in a row reduce to a literal delimiter character.
         WriteRaw(&variable_delimiter_, 1);
       } else {
         // Replace with the variable's value.
-        std::map<std::string, std::string>::const_iterator iter = variables.find(varname);
+        map<string, string>::const_iterator iter = variables.find(varname);
         if (iter == variables.end()) {
           GOOGLE_LOG(DFATAL) << " Undefined variable: " << varname;
         } else {
@@ -112,31 +111,31 @@ void Printer::Print(const std::map<std::string, std::string>& variables, const c
 }
 
 void Printer::Print(const char* text) {
-  static std::map<std::string, std::string> empty;
+  static map<string, string> empty;
   Print(empty, text);
 }
 
 void Printer::Print(const char* text,
-                    const char* variable, const std::string& value) {
-  std::map<std::string, std::string> vars;
+                    const char* variable, const string& value) {
+  map<string, string> vars;
   vars[variable] = value;
   Print(vars, text);
 }
 
 void Printer::Print(const char* text,
-                    const char* variable1, const std::string& value1,
-                    const char* variable2, const std::string& value2) {
-  std::map<std::string, std::string> vars;
+                    const char* variable1, const string& value1,
+                    const char* variable2, const string& value2) {
+  map<string, string> vars;
   vars[variable1] = value1;
   vars[variable2] = value2;
   Print(vars, text);
 }
 
 void Printer::Print(const char* text,
-                    const char* variable1, const std::string& value1,
-                    const char* variable2, const std::string& value2,
-                    const char* variable3, const std::string& value3) {
-  std::map<std::string, std::string> vars;
+                    const char* variable1, const string& value1,
+                    const char* variable2, const string& value2,
+                    const char* variable3, const string& value3) {
+  map<string, string> vars;
   vars[variable1] = value1;
   vars[variable2] = value2;
   vars[variable3] = value3;
@@ -156,7 +155,7 @@ void Printer::Outdent() {
   indent_.resize(indent_.size() - 2);
 }
 
-void Printer::PrintRaw(const std::string& data) {
+void Printer::PrintRaw(const string& data) {
   WriteRaw(data.data(), data.size());
 }
 
@@ -169,7 +168,7 @@ void Printer::WriteRaw(const char* data, int size) {
   if (failed_) return;
   if (size == 0) return;
 
-  if (at_start_of_line_) {
+  if (at_start_of_line_ && (size > 0) && (data[0] != '\n')) {
     // Insert an indent.
     at_start_of_line_ = false;
     WriteRaw(indent_.data(), indent_.size());

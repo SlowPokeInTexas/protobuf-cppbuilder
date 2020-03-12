@@ -44,7 +44,7 @@
 #include <google/protobuf/stubs/common.h>
 #include <google/protobuf/testing/googletest.h>
 #include <gtest/gtest.h>
-#include <google/protobuf/stubs/stl_util-inl.h>
+#include <google/protobuf/stubs/stl_util.h>
 
 namespace google {
 namespace protobuf {
@@ -77,7 +77,7 @@ TEST(WireFormatTest, MaxFieldNumber) {
 
 TEST(WireFormatTest, Parse) {
   unittest::TestAllTypes source, dest;
-  std::string data;
+  string data;
 
   // Serialize using the generated code.
   TestUtil::SetAllFields(&source);
@@ -94,7 +94,7 @@ TEST(WireFormatTest, Parse) {
 
 TEST(WireFormatTest, ParseExtensions) {
   unittest::TestAllExtensions source, dest;
-  std::string data;
+  string data;
 
   // Serialize using the generated code.
   TestUtil::SetAllExtensions(&source);
@@ -111,7 +111,7 @@ TEST(WireFormatTest, ParseExtensions) {
 
 TEST(WireFormatTest, ParsePacked) {
   unittest::TestPackedTypes source, dest;
-  std::string data;
+  string data;
 
   // Serialize using the generated code.
   TestUtil::SetPackedFields(&source);
@@ -130,7 +130,7 @@ TEST(WireFormatTest, ParsePackedFromUnpacked) {
   // Serialize using the generated code.
   unittest::TestUnpackedTypes source;
   TestUtil::SetUnpackedFields(&source);
-  std::string data = source.SerializeAsString();
+  string data = source.SerializeAsString();
 
   // Parse using WireFormat.
   unittest::TestPackedTypes dest;
@@ -146,7 +146,7 @@ TEST(WireFormatTest, ParseUnpackedFromPacked) {
   // Serialize using the generated code.
   unittest::TestPackedTypes source;
   TestUtil::SetPackedFields(&source);
-  std::string data = source.SerializeAsString();
+  string data = source.SerializeAsString();
 
   // Parse using WireFormat.
   unittest::TestUnpackedTypes dest;
@@ -160,7 +160,7 @@ TEST(WireFormatTest, ParseUnpackedFromPacked) {
 
 TEST(WireFormatTest, ParsePackedExtensions) {
   unittest::TestPackedExtensions source, dest;
-  std::string data;
+  string data;
 
   // Serialize using the generated code.
   TestUtil::SetPackedExtensions(&source);
@@ -219,8 +219,8 @@ TEST(WireFormatTest, ByteSizePackedExtensions) {
 
 TEST(WireFormatTest, Serialize) {
   unittest::TestAllTypes message;
-  std::string generated_data;
-  std::string dynamic_data;
+  string generated_data;
+  string dynamic_data;
 
   TestUtil::SetAllFields(&message);
   int size = message.ByteSize();
@@ -249,8 +249,8 @@ TEST(WireFormatTest, Serialize) {
 
 TEST(WireFormatTest, SerializeExtensions) {
   unittest::TestAllExtensions message;
-  std::string generated_data;
-  std::string dynamic_data;
+  string generated_data;
+  string dynamic_data;
 
   TestUtil::SetAllExtensions(&message);
   int size = message.ByteSize();
@@ -279,8 +279,8 @@ TEST(WireFormatTest, SerializeExtensions) {
 
 TEST(WireFormatTest, SerializeFieldsAndExtensions) {
   unittest::TestFieldOrderings message;
-  std::string generated_data;
-  std::string dynamic_data;
+  string generated_data;
+  string dynamic_data;
 
   TestUtil::SetAllFieldsAndExtensions(&message);
   int size = message.ByteSize();
@@ -314,7 +314,7 @@ TEST(WireFormatTest, SerializeFieldsAndExtensions) {
 TEST(WireFormatTest, ParseMultipleExtensionRanges) {
   // Make sure we can parse a message that contains multiple extensions ranges.
   unittest::TestFieldOrderings source;
-  std::string data;
+  string data;
 
   TestUtil::SetAllFieldsAndExtensions(&source);
   source.SerializeToString(&data);
@@ -347,7 +347,7 @@ TEST(WireFormatTest, SerializeMessageSet) {
   message_set.mutable_unknown_fields()->AddLengthDelimited(
     kUnknownTypeId, "bar");
 
-  std::string data;
+  string data;
   ASSERT_TRUE(message_set.SerializeToString(&data));
 
   // Parse back using RawMessageSet and check the contents.
@@ -394,22 +394,22 @@ TEST(WireFormatTest, SerializeMessageSetVariousWaysAreEqual) {
   EXPECT_EQ(size, message_set.GetCachedSize());
   ASSERT_EQ(size, WireFormat::ByteSize(message_set));
 
-  std::string flat_data;
-  std::string stream_data;
-  std::string dynamic_data;
+  string flat_data;
+  string stream_data;
+  string dynamic_data;
   flat_data.resize(size);
   stream_data.resize(size);
 
   // Serialize to flat array
   {
-    uint8* target = reinterpret_cast<uint8*>(protobuf::string_as_array(&flat_data));
+    uint8* target = reinterpret_cast<uint8*>(string_as_array(&flat_data));
     uint8* end = message_set.SerializeWithCachedSizesToArray(target);
     EXPECT_EQ(size, end - target);
   }
 
   // Serialize to buffer
   {
-    io::ArrayOutputStream array_stream(protobuf::string_as_array(&stream_data), size, 1);
+    io::ArrayOutputStream array_stream(string_as_array(&stream_data), size, 1);
     io::CodedOutputStream output_stream(&array_stream);
     message_set.SerializeWithCachedSizes(&output_stream);
     ASSERT_FALSE(output_stream.HadError());
@@ -455,7 +455,7 @@ TEST(WireFormatTest, ParseMessageSet) {
     item->set_message("bar");
   }
 
-  std::string data;
+  string data;
   ASSERT_TRUE(raw.SerializeToString(&data));
 
   // Parse as a TestMessageSet and check the contents.
@@ -480,10 +480,58 @@ TEST(WireFormatTest, ParseMessageSet) {
   EXPECT_EQ(message_set.DebugString(), dynamic_message_set.DebugString());
 }
 
+TEST(WireFormatTest, ParseMessageSetWithReverseTagOrder) {
+  string data;
+  {
+    unittest::TestMessageSetExtension1 message;
+    message.set_i(123);
+    // Build a MessageSet manually with its message content put before its
+    // type_id.
+    io::StringOutputStream output_stream(&data);
+    io::CodedOutputStream coded_output(&output_stream);
+    coded_output.WriteTag(WireFormatLite::kMessageSetItemStartTag);
+    // Write the message content first.
+    WireFormatLite::WriteTag(WireFormatLite::kMessageSetMessageNumber,
+                             WireFormatLite::WIRETYPE_LENGTH_DELIMITED,
+                             &coded_output);
+    coded_output.WriteVarint32(message.ByteSize());
+    message.SerializeWithCachedSizes(&coded_output);
+    // Write the type id.
+    uint32 type_id = message.GetDescriptor()->extension(0)->number();
+    WireFormatLite::WriteUInt32(WireFormatLite::kMessageSetTypeIdNumber,
+                                type_id, &coded_output);
+    coded_output.WriteTag(WireFormatLite::kMessageSetItemEndTag);
+  }
+  {
+    unittest::TestMessageSet message_set;
+    ASSERT_TRUE(message_set.ParseFromString(data));
+
+    EXPECT_EQ(123, message_set.GetExtension(
+        unittest::TestMessageSetExtension1::message_set_extension).i());
+  }
+  {
+    // Test parse the message via Reflection.
+    unittest::TestMessageSet message_set;
+    io::CodedInputStream input(
+        reinterpret_cast<const uint8*>(data.data()), data.size());
+    EXPECT_TRUE(WireFormat::ParseAndMergePartial(&input, &message_set));
+    EXPECT_TRUE(input.ConsumedEntireMessage());
+
+    EXPECT_EQ(123, message_set.GetExtension(
+        unittest::TestMessageSetExtension1::message_set_extension).i());
+  }
+}
+
+TEST(WireFormatTest, ParseBrokenMessageSet) {
+  unittest::TestMessageSet message_set;
+  string input("goodbye");  // Invalid wire format data.
+  EXPECT_FALSE(message_set.ParseFromString(input));
+}
+
 TEST(WireFormatTest, RecursionLimit) {
   unittest::TestRecursiveMessage message;
   message.mutable_a()->mutable_a()->mutable_a()->mutable_a()->set_i(1);
-  std::string data;
+  string data;
   message.SerializeToString(&data);
 
   {
@@ -511,7 +559,7 @@ TEST(WireFormatTest, UnknownFieldRecursionLimit) {
         ->AddGroup(1234)
         ->AddGroup(1234)
         ->AddVarint(1234, 123);
-  std::string data;
+  string data;
   message.SerializeToString(&data);
 
   {
@@ -531,7 +579,7 @@ TEST(WireFormatTest, UnknownFieldRecursionLimit) {
   }
 }
 
-/*TEST(WireFormatTest, ZigZag) {
+TEST(WireFormatTest, ZigZag) {
 // avoid line-wrapping
 #define LL(x) GOOGLE_LONGLONG(x)
 #define ULL(x) GOOGLE_ULONGLONG(x)
@@ -598,7 +646,7 @@ TEST(WireFormatTest, UnknownFieldRecursionLimit) {
             LL(856912304801416))));
   EXPECT_EQ(LL(-75123905439571256), ZigZagDecode64(ZigZagEncode64(
             LL(-75123905439571256))));
-}*/
+}
 
 TEST(WireFormatTest, RepeatedScalarsDifferentTagSizes) {
   // At one point checks would trigger when parsing repeated fixed scalar
@@ -643,19 +691,19 @@ class WireFormatInvalidInputTest : public testing::Test {
  protected:
   // Make a serialized TestAllTypes in which the field optional_nested_message
   // contains exactly the given bytes, which may be invalid.
-  std::string MakeInvalidEmbeddedMessage(const char* bytes, int size) {
+  string MakeInvalidEmbeddedMessage(const char* bytes, int size) {
     const FieldDescriptor* field =
       unittest::TestAllTypes::descriptor()->FindFieldByName(
         "optional_nested_message");
     GOOGLE_CHECK(field != NULL);
 
-    std::string result;
+    string result;
 
     {
       io::StringOutputStream raw_output(&result);
       io::CodedOutputStream output(&raw_output);
 
-      WireFormatLite::WriteBytes(field->number(), std::string(bytes, size), &output);
+      WireFormatLite::WriteBytes(field->number(), string(bytes, size), &output);
     }
 
     return result;
@@ -664,20 +712,20 @@ class WireFormatInvalidInputTest : public testing::Test {
   // Make a serialized TestAllTypes in which the field optionalgroup
   // contains exactly the given bytes -- which may be invalid -- and
   // possibly no end tag.
-  std::string MakeInvalidGroup(const char* bytes, int size, bool include_end_tag) {
+  string MakeInvalidGroup(const char* bytes, int size, bool include_end_tag) {
     const FieldDescriptor* field =
       unittest::TestAllTypes::descriptor()->FindFieldByName(
         "optionalgroup");
     GOOGLE_CHECK(field != NULL);
 
-    std::string result;
+    string result;
 
     {
       io::StringOutputStream raw_output(&result);
       io::CodedOutputStream output(&raw_output);
 
       output.WriteVarint32(WireFormat::MakeTag(field));
-      output.WriteString(std::string(bytes, size));
+      output.WriteString(string(bytes, size));
       if (include_end_tag) {
         output.WriteVarint32(WireFormatLite::MakeTag(
           field->number(), WireFormatLite::WIRETYPE_END_GROUP));
@@ -759,7 +807,7 @@ TEST_F(WireFormatInvalidInputTest, InvalidStringInUnknownGroup) {
 
   unittest::TestAllTypes message;
   message.set_optional_string("foo foo foo foo");
-  std::string data;
+  string data;
   message.SerializeToString(&data);
 
   // Chop some bytes off the end.
@@ -788,7 +836,7 @@ const char * kInvalidUTF8String = "Invalid UTF-8: \xA0\xB0\xC0\xD0";
 const char * kValidUTF8String = "Valid UTF-8: \x01\x02\350\260\267\346\255\214";
 
 template<typename T>
-bool WriteMessage(const char *value, T *message, std::string *wire_buffer) {
+bool WriteMessage(const char *value, T *message, string *wire_buffer) {
   message->set_data(value);
   wire_buffer->clear();
   message->AppendToString(wire_buffer);
@@ -796,14 +844,18 @@ bool WriteMessage(const char *value, T *message, std::string *wire_buffer) {
 }
 
 template<typename T>
-bool ReadMessage(const std::string &wire_buffer, T *message) {
+bool ReadMessage(const string &wire_buffer, T *message) {
   return message->ParseFromArray(wire_buffer.data(), wire_buffer.size());
 }
 
+bool StartsWith(const string& s, const string& prefix) {
+  return s.substr(0, prefix.length()) == prefix;
+}
+
 TEST(Utf8ValidationTest, WriteInvalidUTF8String) {
-  std::string wire_buffer;
+  string wire_buffer;
   protobuf_unittest::OneString input;
-  std::vector<std::string> errors;
+  vector<string> errors;
   {
     ScopedMemoryLog log;
     WriteMessage(kInvalidUTF8String, &input, &wire_buffer);
@@ -811,22 +863,21 @@ TEST(Utf8ValidationTest, WriteInvalidUTF8String) {
   }
 #ifdef GOOGLE_PROTOBUF_UTF8_VALIDATION_ENABLED
   ASSERT_EQ(1, errors.size());
-  EXPECT_EQ("Encountered string containing invalid UTF-8 data while "
-            "serializing protocol buffer. Strings must contain only UTF-8; "
-            "use the 'bytes' type for raw bytes.",
-            errors[0]);
-
+  EXPECT_TRUE(StartsWith(errors[0],
+                         "String field contains invalid UTF-8 data when "
+                         "serializing a protocol buffer. Use the "
+                         "'bytes' type if you intend to send raw bytes."));
 #else
   ASSERT_EQ(0, errors.size());
 #endif  // GOOGLE_PROTOBUF_UTF8_VALIDATION_ENABLED
 }
 
 TEST(Utf8ValidationTest, ReadInvalidUTF8String) {
-  std::string wire_buffer;
+  string wire_buffer;
   protobuf_unittest::OneString input;
   WriteMessage(kInvalidUTF8String, &input, &wire_buffer);
   protobuf_unittest::OneString output;
-  std::vector<std::string> errors;
+  vector<string> errors;
   {
     ScopedMemoryLog log;
     ReadMessage(wire_buffer, &output);
@@ -834,10 +885,10 @@ TEST(Utf8ValidationTest, ReadInvalidUTF8String) {
   }
 #ifdef GOOGLE_PROTOBUF_UTF8_VALIDATION_ENABLED
   ASSERT_EQ(1, errors.size());
-  EXPECT_EQ("Encountered string containing invalid UTF-8 data while "
-            "parsing protocol buffer. Strings must contain only UTF-8; "
-            "use the 'bytes' type for raw bytes.",
-            errors[0]);
+  EXPECT_TRUE(StartsWith(errors[0],
+                         "String field contains invalid UTF-8 data when "
+                         "parsing a protocol buffer. Use the "
+                         "'bytes' type if you intend to send raw bytes."));
 
 #else
   ASSERT_EQ(0, errors.size());
@@ -845,9 +896,9 @@ TEST(Utf8ValidationTest, ReadInvalidUTF8String) {
 }
 
 TEST(Utf8ValidationTest, WriteValidUTF8String) {
-  std::string wire_buffer;
+  string wire_buffer;
   protobuf_unittest::OneString input;
-  std::vector<std::string> errors;
+  vector<string> errors;
   {
     ScopedMemoryLog log;
     WriteMessage(kValidUTF8String, &input, &wire_buffer);
@@ -857,11 +908,11 @@ TEST(Utf8ValidationTest, WriteValidUTF8String) {
 }
 
 TEST(Utf8ValidationTest, ReadValidUTF8String) {
-  std::string wire_buffer;
+  string wire_buffer;
   protobuf_unittest::OneString input;
   WriteMessage(kValidUTF8String, &input, &wire_buffer);
   protobuf_unittest::OneString output;
-  std::vector<std::string> errors;
+  vector<string> errors;
   {
     ScopedMemoryLog log;
     ReadMessage(wire_buffer, &output);
@@ -873,9 +924,9 @@ TEST(Utf8ValidationTest, ReadValidUTF8String) {
 
 // Bytes: anything can pass as bytes, use invalid UTF-8 string to test
 TEST(Utf8ValidationTest, WriteArbitraryBytes) {
-  std::string wire_buffer;
+  string wire_buffer;
   protobuf_unittest::OneBytes input;
-  std::vector<std::string> errors;
+  vector<string> errors;
   {
     ScopedMemoryLog log;
     WriteMessage(kInvalidUTF8String, &input, &wire_buffer);
@@ -885,11 +936,11 @@ TEST(Utf8ValidationTest, WriteArbitraryBytes) {
 }
 
 TEST(Utf8ValidationTest, ReadArbitraryBytes) {
-  std::string wire_buffer;
+  string wire_buffer;
   protobuf_unittest::OneBytes input;
   WriteMessage(kInvalidUTF8String, &input, &wire_buffer);
   protobuf_unittest::OneBytes output;
-  std::vector<std::string> errors;
+  vector<string> errors;
   {
     ScopedMemoryLog log;
     ReadMessage(wire_buffer, &output);
@@ -897,6 +948,28 @@ TEST(Utf8ValidationTest, ReadArbitraryBytes) {
   }
   ASSERT_EQ(0, errors.size());
   EXPECT_EQ(input.data(), output.data());
+}
+
+TEST(Utf8ValidationTest, ParseRepeatedString) {
+  protobuf_unittest::MoreBytes input;
+  input.add_data(kValidUTF8String);
+  input.add_data(kInvalidUTF8String);
+  input.add_data(kInvalidUTF8String);
+  string wire_buffer = input.SerializeAsString();
+
+  protobuf_unittest::MoreString output;
+  vector<string> errors;
+  {
+    ScopedMemoryLog log;
+    ReadMessage(wire_buffer, &output);
+    errors = log.GetMessages(ERROR);
+  }
+#ifdef GOOGLE_PROTOBUF_UTF8_VALIDATION_ENABLED
+  ASSERT_EQ(2, errors.size());
+#else
+  ASSERT_EQ(0, errors.size());
+#endif  // GOOGLE_PROTOBUF_UTF8_VALIDATION_ENABLED
+  EXPECT_EQ(wire_buffer, output.SerializeAsString());
 }
 
 }  // namespace

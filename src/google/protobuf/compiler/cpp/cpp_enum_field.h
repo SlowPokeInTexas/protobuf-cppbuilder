@@ -46,7 +46,8 @@ namespace cpp {
 
 class EnumFieldGenerator : public FieldGenerator {
  public:
-  explicit EnumFieldGenerator(const FieldDescriptor* descriptor);
+  explicit EnumFieldGenerator(const FieldDescriptor* descriptor,
+                              const Options& options);
   ~EnumFieldGenerator();
 
   // implements FieldGenerator ---------------------------------------
@@ -64,14 +65,15 @@ class EnumFieldGenerator : public FieldGenerator {
 
  private:
   const FieldDescriptor* descriptor_;
-  std::map<std::string, std::string> variables_;
+  map<string, string> variables_;
 
   GOOGLE_DISALLOW_EVIL_CONSTRUCTORS(EnumFieldGenerator);
 };
 
 class RepeatedEnumFieldGenerator : public FieldGenerator {
  public:
-  explicit RepeatedEnumFieldGenerator(const FieldDescriptor* descriptor);
+  explicit RepeatedEnumFieldGenerator(const FieldDescriptor* descriptor,
+                                      const Options& options);
   ~RepeatedEnumFieldGenerator();
 
   // implements FieldGenerator ---------------------------------------
@@ -90,7 +92,7 @@ class RepeatedEnumFieldGenerator : public FieldGenerator {
 
  private:
   const FieldDescriptor* descriptor_;
-  std::map<std::string, std::string> variables_;
+  map<string, string> variables_;
 
   GOOGLE_DISALLOW_EVIL_CONSTRUCTORS(RepeatedEnumFieldGenerator);
 };

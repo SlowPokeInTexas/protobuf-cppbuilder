@@ -65,9 +65,9 @@ class LIBPROTOC_EXPORT Generator : public CodeGenerator {
 
   // CodeGenerator methods.
   virtual bool Generate(const FileDescriptor* file,
-                        const std::string& parameter,
+                        const string& parameter,
                         GeneratorContext* generator_context,
-                        std::string* error) const;
+                        string* error) const;
 
  private:
   void PrintImports() const;
@@ -84,7 +84,7 @@ class LIBPROTOC_EXPORT Generator : public CodeGenerator {
   void PrintFieldDescriptorsInDescriptor(
       const Descriptor& message_descriptor,
       bool is_extension,
-      const std::string& list_variable_name,
+      const string& list_variable_name,
       int (Descriptor::*CountFn)() const,
       const FieldDescriptor* (Descriptor::*GetterFn)(int) const) const;
   void PrintFieldsInDescriptor(const Descriptor& message_descriptor) const;
@@ -103,11 +103,11 @@ class LIBPROTOC_EXPORT Generator : public CodeGenerator {
       const Descriptor* containing_descriptor) const;
   void FixForeignFieldsInField(const Descriptor* containing_type,
                                const FieldDescriptor& field,
-                               const std::string& python_dict_name) const;
+                               const string& python_dict_name) const;
   void AddMessageToFileDescriptor(const Descriptor& descriptor) const;
-  std::string FieldReferencingExpression(const Descriptor* containing_type,
+  string FieldReferencingExpression(const Descriptor* containing_type,
                                     const FieldDescriptor& field,
-                                    const std::string& python_dict_name) const;
+                                    const string& python_dict_name) const;
   template <typename DescriptorT>
   void FixContainingTypeInDescriptor(
       const DescriptorT& descriptor,
@@ -124,25 +124,30 @@ class LIBPROTOC_EXPORT Generator : public CodeGenerator {
   void PrintServiceStub(const ServiceDescriptor& descriptor) const;
 
   void PrintEnumValueDescriptor(const EnumValueDescriptor& descriptor) const;
-  std::string OptionsValue(const std::string& class_name,
-                      const std::string& serialized_options) const;
+  string OptionsValue(const string& class_name,
+                      const string& serialized_options) const;
   bool GeneratingDescriptorProto() const;
 
   template <typename DescriptorT>
-  std::string ModuleLevelDescriptorName(const DescriptorT& descriptor) const;
-  std::string ModuleLevelMessageName(const Descriptor& descriptor) const;
-  std::string ModuleLevelServiceDescriptorName(
+  string ModuleLevelDescriptorName(const DescriptorT& descriptor) const;
+  string ModuleLevelMessageName(const Descriptor& descriptor) const;
+  string ModuleLevelServiceDescriptorName(
       const ServiceDescriptor& descriptor) const;
 
   template <typename DescriptorT, typename DescriptorProtoT>
   void PrintSerializedPbInterval(
       const DescriptorT& descriptor, DescriptorProtoT& proto) const;
 
+  void FixAllDescriptorOptions() const;
+  void FixOptionsForField(const FieldDescriptor& field) const;
+  void FixOptionsForEnum(const EnumDescriptor& descriptor) const;
+  void FixOptionsForMessage(const Descriptor& descriptor) const;
+
   // Very coarse-grained lock to ensure that Generate() is reentrant.
   // Guards file_, printer_ and file_descriptor_serialized_.
   mutable Mutex mutex_;
   mutable const FileDescriptor* file_;  // Set in Generate().  Under mutex_.
-  mutable std::string file_descriptor_serialized_;
+  mutable string file_descriptor_serialized_;
   mutable io::Printer* printer_;  // Set in Generate().  Under mutex_.
 
   GOOGLE_DISALLOW_EVIL_CONSTRUCTORS(Generator);

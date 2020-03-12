@@ -43,7 +43,7 @@
 #include <limits.h>
 #include <google/protobuf/io/zero_copy_stream.h>
 #include <google/protobuf/stubs/common.h>
-#include <google/protobuf/stubs/stl_util-inl.h>
+#include <google/protobuf/stubs/stl_util.h>
 
 
 namespace google {
@@ -69,6 +69,19 @@ inline bool NextNonEmpty(ZeroCopyInputStream* input,
 
 // CodedInputStream ==================================================
 
+CodedInputStream::~CodedInputStream() {
+  if (input_ != NULL) {
+    BackUpInputToCurrentPosition();
+  }
+
+  if (total_bytes_warning_threshold_ == -2) {
+    GOOGLE_LOG(WARNING) << "The total number of bytes read was " << total_bytes_read_;
+  }
+}
+
+// Static.
+int CodedInputStream::default_recursion_limit_ = 100;
+
 
 void CodedInputStream::BackUpInputToCurrentPosition() {
   int backup_bytes = BufferSize() + buffer_size_after_limit_ + overflow_bytes_;
@@ -85,7 +98,7 @@ void CodedInputStream::BackUpInputToCurrentPosition() {
 
 inline void CodedInputStream::RecomputeBufferLimits() {
   buffer_end_ += buffer_size_after_limit_;
-  int closest_limit = std::min(current_limit_, total_bytes_limit_);
+  int closest_limit = min(current_limit_, total_bytes_limit_);
   if (closest_limit < total_bytes_read_) {
     // The limit position is in the current buffer.  We must adjust
     // the buffer size accordingly.
@@ -98,8 +111,7 @@ inline void CodedInputStream::RecomputeBufferLimits() {
 
 CodedInputStream::Limit CodedInputStream::PushLimit(int byte_limit) {
   // Current position relative to the beginning of the stream.
-  int current_position = total_bytes_read_ -
-      (BufferSize() + buffer_size_after_limit_);
+  int current_position = CurrentPosition();
 
   Limit old_limit = current_limit_;
 
@@ -116,7 +128,7 @@ CodedInputStream::Limit CodedInputStream::PushLimit(int byte_limit) {
   // We need to enforce all limits, not just the new one, so if the previous
   // limit was before the new requested limit, we continue to enforce the
   // previous limit.
-  current_limit_ = std::min(current_limit_, old_limit);
+  current_limit_ = min(current_limit_, old_limit);
 
   RecomputeBufferLimits();
   return old_limit;
@@ -133,10 +145,9 @@ void CodedInputStream::PopLimit(Limit limit) {
   legitimate_message_end_ = false;
 }
 
-int CodedInputStream::BytesUntilLimit() {
+int CodedInputStream::BytesUntilLimit() const {
   if (current_limit_ == INT_MAX) return -1;
-  int current_position = total_bytes_read_ -
-      (BufferSize() + buffer_size_after_limit_);
+  int current_position = CurrentPosition();
 
   return current_limit_ - current_position;
 }
@@ -145,10 +156,14 @@ void CodedInputStream::SetTotalBytesLimit(
     int total_bytes_limit, int warning_threshold) {
   // Make sure the limit isn't already past, since this could confuse other
   // code.
-  int current_position = total_bytes_read_ -
-      (BufferSize() + buffer_size_after_limit_);
-  total_bytes_limit_ = std::max(current_position, total_bytes_limit);
-  total_bytes_warning_threshold_ = warning_threshold;
+  int current_position = CurrentPosition();
+  total_bytes_limit_ = max(current_position, total_bytes_limit);
+  if (warning_threshold >= 0) {
+    total_bytes_warning_threshold_ = warning_threshold;
+  } else {
+    // warning_threshold is negative
+    total_bytes_warning_threshold_ = -1;
+  }
   RecomputeBufferLimits();
 }
 
@@ -182,7 +197,7 @@ bool CodedInputStream::Skip(int count) {
   buffer_end_ = buffer_;
 
   // Make sure this skip doesn't try to skip past the current limit.
-  int closest_limit = std::min(current_limit_, total_bytes_limit_);
+  int closest_limit = min(current_limit_, total_bytes_limit_);
   int bytes_until_limit = closest_limit - total_bytes_read_;
   if (bytes_until_limit < count) {
     // We hit the limit.  Skip up to it then fail.
@@ -222,12 +237,12 @@ bool CodedInputStream::ReadRaw(void* buffer, int size) {
   return true;
 }
 
-bool CodedInputStream::ReadString(std::string* buffer, int size) {
+bool CodedInputStream::ReadString(string* buffer, int size) {
   if (size < 0) return false;  // security: size is often user-supplied
   return InternalReadStringInline(buffer, size);
 }
 
-bool CodedInputStream::ReadStringFallback(std::string* buffer, int size) {
+bool CodedInputStream::ReadStringFallback(string* buffer, int size) {
   if (!buffer->empty()) {
     buffer->clear();
   }
@@ -368,16 +383,17 @@ uint32 CodedInputStream::ReadTagSlow() {
 
   // For the slow path, just do a 64-bit read. Try to optimize for one-byte tags
   // again, since we have now refreshed the buffer.
-  uint64 result;
+  uint64 result = 0;
   if (!ReadVarint64(&result)) return 0;
   return static_cast<uint32>(result);
 }
 
 uint32 CodedInputStream::ReadTagFallback() {
-  if (BufferSize() >= kMaxVarintBytes ||
+  const int buf_size = BufferSize();
+  if (buf_size >= kMaxVarintBytes ||
       // Optimization:  If the varint ends at exactly the end of the buffer,
       // we can detect that and still use the fast path.
-      (buffer_end_ > buffer_ && !(buffer_end_[-1] & 0x80))) {
+      (buf_size > 0 && !(buffer_end_[-1] & 0x80))) {
     uint32 tag;
     const uint8* end = ReadVarint32FromArray(buffer_, &tag);
     if (end == NULL) {
@@ -388,7 +404,9 @@ uint32 CodedInputStream::ReadTagFallback() {
   } else {
     // We are commonly at a limit when attempting to read tags. Try to quickly
     // detect this case without making another function call.
-    if (buffer_ == buffer_end_ && buffer_size_after_limit_ > 0 &&
+    if ((buf_size == 0) &&
+        ((buffer_size_after_limit_ > 0) ||
+         (total_bytes_read_ == current_limit_)) &&
         // Make sure that the limit we hit is not total_bytes_limit_, since
         // in that case we still need to call Refresh() so that it prints an
         // error.
@@ -452,7 +470,7 @@ bool CodedInputStream::ReadVarint64Fallback(uint64* value) {
 
     // We have overrun the maximum size of a varint (10 bytes).  The data
     // must be corrupt.
-    return NULL;
+    return false;
 
    done:
     Advance(ptr - buffer_);
@@ -492,8 +510,8 @@ bool CodedInputStream::Refresh() {
                       "CodedInputStream::SetTotalBytesLimit() in "
                       "google/protobuf/io/coded_stream.h.";
 
-    // Don't warn again for this stream.
-    total_bytes_warning_threshold_ = -1;
+    // Don't warn again for this stream, and print total size at the end.
+    total_bytes_warning_threshold_ = -2;
   }
 
   const void* void_buffer;

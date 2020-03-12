@@ -40,10 +40,16 @@
 #define GOOGLE_PROTOBUF_MESSAGE_LITE_H__
 
 #include <google/protobuf/stubs/common.h>
-#include <google/protobuf/io/coded_stream.h>
 
 namespace google {
 namespace protobuf {
+
+namespace io {
+  class CodedInputStream;
+  class CodedOutputStream;
+  class ZeroCopyInputStream;
+  class ZeroCopyOutputStream;
+}
 
 // Interface to light weight protocol messages.
 //
@@ -76,7 +82,7 @@ class LIBPROTOBUF_EXPORT MessageLite {
   // Basic Operations ------------------------------------------------
 
   // Get the name of this message type, e.g. "foo.bar.BazProto".
-  virtual std::string GetTypeName() const = 0;
+  virtual string GetTypeName() const = 0;
 
   // Construct a new instance of the same type.  Ownership is passed to the
   // caller.
@@ -95,7 +101,7 @@ class LIBPROTOBUF_EXPORT MessageLite {
   // This is not implemented for Lite messages -- it just returns "(cannot
   // determine missing fields for lite message)".  However, it is implemented
   // for full messages.  See message.h.
-  virtual std::string InitializationErrorString() const;
+  virtual string InitializationErrorString() const;
 
   // If |other| is the exact same class as this, calls MergeFrom().  Otherwise,
   // results are undefined (probably crash).
@@ -127,10 +133,10 @@ class LIBPROTOBUF_EXPORT MessageLite {
   bool ParsePartialFromBoundedZeroCopyStream(io::ZeroCopyInputStream* input,
                                              int size);
   // Parse a protocol buffer contained in a string.
-  bool ParseFromString(const std::string& data);
+  bool ParseFromString(const string& data);
   // Like ParseFromString(), but accepts messages that are missing
   // required fields.
-  bool ParsePartialFromString(const std::string& data);
+  bool ParsePartialFromString(const string& data);
   // Parse a protocol buffer contained in an array of bytes.
   bool ParseFromArray(const void* data, int size);
   // Like ParseFromArray(), but accepts messages that are missing
@@ -158,6 +164,7 @@ class LIBPROTOBUF_EXPORT MessageLite {
   // followed by IsInitialized().
   virtual bool MergePartialFromCodedStream(io::CodedInputStream* input) = 0;
 
+
   // Serialization ---------------------------------------------------
   // Methods for serializing in protocol buffer format.  Most of these
   // are just simple wrappers around ByteSize() and SerializeWithCachedSizes().
@@ -175,9 +182,9 @@ class LIBPROTOBUF_EXPORT MessageLite {
   bool SerializePartialToZeroCopyStream(io::ZeroCopyOutputStream* output) const;
   // Serialize the message and store it in the given string.  All required
   // fields must be set.
-  bool SerializeToString(std::string* output) const;
+  bool SerializeToString(string* output) const;
   // Like SerializeToString(), but allows missing required fields.
-  bool SerializePartialToString(std::string* output) const;
+  bool SerializePartialToString(string* output) const;
   // Serialize the message and store it in the given byte array.  All required
   // fields must be set.
   bool SerializeToArray(void* data, int size) const;
@@ -190,15 +197,15 @@ class LIBPROTOBUF_EXPORT MessageLite {
   // Note: If you intend to generate many such strings, you may
   // reduce heap fragmentation by instead re-using the same string
   // object with calls to SerializeToString().
-  std::string SerializeAsString() const;
+  string SerializeAsString() const;
   // Like SerializeAsString(), but allows missing required fields.
-  std::string SerializePartialAsString() const;
+  string SerializePartialAsString() const;
 
   // Like SerializeToString(), but appends to the data to the string's existing
   // contents.  All required fields must be set.
-  bool AppendToString(std::string* output) const;
+  bool AppendToString(string* output) const;
   // Like AppendToString(), but allows missing required fields.
-  bool AppendPartialToString(std::string* output) const;
+  bool AppendPartialToString(string* output) const;
 
   // Computes the serialized size of the message.  This recursively calls
   // ByteSize() on all embedded messages.  If a subclass does not override

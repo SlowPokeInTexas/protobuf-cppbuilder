@@ -32,8 +32,12 @@
 //  Based on original Protocol Buffers design by
 //  Sanjay Ghemawat, Jeff Dean, and others.
 
+#include <string>
+#include <vector>
+
 #include <google/protobuf/reflection_ops.h>
 #include <google/protobuf/descriptor.h>
+#include <google/protobuf/descriptor.pb.h>
 #include <google/protobuf/unknown_field_set.h>
 #include <google/protobuf/stubs/strutil.h>
 
@@ -57,7 +61,7 @@ void ReflectionOps::Merge(const Message& from, Message* to) {
   const Reflection* from_reflection = from.GetReflection();
   const Reflection* to_reflection = to->GetReflection();
 
-  std::vector<const FieldDescriptor*> fields;
+  vector<const FieldDescriptor*> fields;
   from_reflection->ListFields(from, &fields);
   for (int i = 0; i < fields.size(); i++) {
     const FieldDescriptor* field = fields[i];
@@ -123,7 +127,7 @@ void ReflectionOps::Merge(const Message& from, Message* to) {
 void ReflectionOps::Clear(Message* message) {
   const Reflection* reflection = message->GetReflection();
 
-  std::vector<const FieldDescriptor*> fields;
+  vector<const FieldDescriptor*> fields;
   reflection->ListFields(*message, &fields);
   for (int i = 0; i < fields.size(); i++) {
     reflection->ClearField(message, fields[i]);
@@ -146,16 +150,17 @@ bool ReflectionOps::IsInitialized(const Message& message) {
   }
 
   // Check that sub-messages are initialized.
-  std::vector<const FieldDescriptor*> fields;
+  vector<const FieldDescriptor*> fields;
   reflection->ListFields(message, &fields);
   for (int i = 0; i < fields.size(); i++) {
     const FieldDescriptor* field = fields[i];
     if (field->cpp_type() == FieldDescriptor::CPPTYPE_MESSAGE) {
+
       if (field->is_repeated()) {
         int size = reflection->FieldSize(message, field);
 
-        for (int i = 0; i < size; i++) {
-          if (!reflection->GetRepeatedMessage(message, field, i)
+        for (int j = 0; j < size; j++) {
+          if (!reflection->GetRepeatedMessage(message, field, j)
                           .IsInitialized()) {
             return false;
           }
@@ -176,15 +181,15 @@ void ReflectionOps::DiscardUnknownFields(Message* message) {
 
   reflection->MutableUnknownFields(message)->Clear();
 
-  std::vector<const FieldDescriptor*> fields;
+  vector<const FieldDescriptor*> fields;
   reflection->ListFields(*message, &fields);
   for (int i = 0; i < fields.size(); i++) {
     const FieldDescriptor* field = fields[i];
     if (field->cpp_type() == FieldDescriptor::CPPTYPE_MESSAGE) {
       if (field->is_repeated()) {
         int size = reflection->FieldSize(*message, field);
-        for (int i = 0; i < size; i++) {
-          reflection->MutableRepeatedMessage(message, field, i)
+        for (int j = 0; j < size; j++) {
+          reflection->MutableRepeatedMessage(message, field, j)
                     ->DiscardUnknownFields();
         }
       } else {
@@ -194,10 +199,10 @@ void ReflectionOps::DiscardUnknownFields(Message* message) {
   }
 }
 
-static std::string SubMessagePrefix(const std::string& prefix,
+static string SubMessagePrefix(const string& prefix,
                                const FieldDescriptor* field,
                                int index) {
-  std::string result(prefix);
+  string result(prefix);
   if (field->is_extension()) {
     result.append("(");
     result.append(field->full_name());
@@ -216,8 +221,8 @@ static std::string SubMessagePrefix(const std::string& prefix,
 
 void ReflectionOps::FindInitializationErrors(
     const Message& message,
-    const std::string& prefix,
-    std::vector<std::string>* errors) {
+    const string& prefix,
+    vector<string>* errors) {
   const Descriptor* descriptor = message.GetDescriptor();
   const Reflection* reflection = message.GetReflection();
 
@@ -231,7 +236,7 @@ void ReflectionOps::FindInitializationErrors(
   }
 
   // Check sub-messages.
-  std::vector<const FieldDescriptor*> fields;
+  vector<const FieldDescriptor*> fields;
   reflection->ListFields(message, &fields);
   for (int i = 0; i < fields.size(); i++) {
     const FieldDescriptor* field = fields[i];
@@ -240,11 +245,11 @@ void ReflectionOps::FindInitializationErrors(
       if (field->is_repeated()) {
         int size = reflection->FieldSize(message, field);
 
-        for (int i = 0; i < size; i++) {
+        for (int j = 0; j < size; j++) {
           const Message& sub_message =
-            reflection->GetRepeatedMessage(message, field, i);
+            reflection->GetRepeatedMessage(message, field, j);
           FindInitializationErrors(sub_message,
-                                   SubMessagePrefix(prefix, field, i),
+                                   SubMessagePrefix(prefix, field, j),
                                    errors);
         }
       } else {

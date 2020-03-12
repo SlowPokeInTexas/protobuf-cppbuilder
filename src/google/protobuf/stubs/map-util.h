@@ -42,7 +42,7 @@ namespace protobuf {
 // Perform a lookup in a map or hash_map.
 // If the key is present in the map then the value associated with that
 // key is returned, otherwise the value passed as a default is returned.
-template <typename Collection>
+template <class Collection>
 const typename Collection::value_type::second_type&
 FindWithDefault(const Collection& collection,
                 const typename Collection::value_type::first_type& key,
@@ -57,7 +57,7 @@ FindWithDefault(const Collection& collection,
 // Perform a lookup in a map or hash_map.
 // If the key is present a const pointer to the associated value is returned,
 // otherwise a NULL pointer is returned.
-template <typename Collection>
+template <class Collection>
 const typename Collection::value_type::second_type*
 FindOrNull(const Collection& collection,
            const typename Collection::value_type::first_type& key) {
@@ -68,12 +68,36 @@ FindOrNull(const Collection& collection,
   return &it->second;
 }
 
+// Perform a lookup in a map or hash_map, assuming that the key exists.
+// Crash if it does not.
+//
+// This is intended as a replacement for operator[] as an rvalue (for reading)
+// when the key is guaranteed to exist.
+//
+// operator[] is discouraged for several reasons:
+//  * It has a side-effect of inserting missing keys
+//  * It is not thread-safe (even when it is not inserting, it can still
+//      choose to resize the underlying storage)
+//  * It invalidates iterators (when it chooses to resize)
+//  * It default constructs a value object even if it doesn't need to
+//
+// This version assumes the key is printable, and includes it in the fatal log
+// message.
+template <class Collection>
+const typename Collection::value_type::second_type&
+FindOrDie(const Collection& collection,
+          const typename Collection::value_type::first_type& key) {
+  typename Collection::const_iterator it = collection.find(key);
+  GOOGLE_CHECK(it != collection.end()) << "Map key not found: " << key;
+  return it->second;
+}
+
 // Perform a lookup in a map or hash_map whose values are pointers.
 // If the key is present a const pointer to the associated value is returned,
 // otherwise a NULL pointer is returned.
 // This function does not distinguish between a missing key and a key mapped
 // to a NULL value.
-template <typename Collection>
+template <class Collection>
 const typename Collection::value_type::second_type
 FindPtrOrNull(const Collection& collection,
               const typename Collection::value_type::first_type& key) {
@@ -88,10 +112,10 @@ FindPtrOrNull(const Collection& collection,
 // If the key is not present in the map the key and value are inserted,
 // otherwise the value is updated to be a copy of the value provided.
 // True indicates that an insert took place, false indicates an update.
-template <typename Collection, typename Key, typename Value>
+template <class Collection, class Key, class Value>
 bool InsertOrUpdate(Collection * const collection,
                    const Key& key, const Value& value) {
-  std::pair<typename Collection::iterator, bool> ret =
+  pair<typename Collection::iterator, bool> ret =
     collection->insert(typename Collection::value_type(key, value));
   if (!ret.second) {
     // update
@@ -105,13 +129,11 @@ bool InsertOrUpdate(Collection * const collection,
 // If the key is not present in the map the key and value are
 // inserted, otherwise nothing happens. True indicates that an insert
 // took place, false indicates the key was already present.
-template <typename Collection, typename Key, typename Value>
+template <class Collection, class Key, class Value>
 bool InsertIfNotPresent(Collection * const collection,
                         const Key& key, const Value& value) {
-  typedef typename Collection::iterator CollectionIterator;
-  typedef typename Collection::value_type CollectionValueType;
-  std::pair<CollectionIterator, bool> ret =
-    collection->insert(CollectionValueType(key, value));
+  pair<typename Collection::iterator, bool> ret =
+    collection->insert(typename Collection::value_type(key, value));
   return ret.second;
 }
 

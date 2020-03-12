@@ -35,6 +35,7 @@
 #ifndef GOOGLE_PROTOBUF_TEST_UTIL_H__
 #define GOOGLE_PROTOBUF_TEST_UTIL_H__
 
+#include <stack>
 #include <string>
 #include <google/protobuf/message.h>
 #include <google/protobuf/unittest.pb.h>
@@ -42,13 +43,17 @@
 namespace google {
 namespace protobuf {
 
-namespace unittest = protobuf_unittest;
+namespace unittest = ::protobuf_unittest;
 namespace unittest_import = protobuf_unittest_import;
 
 class TestUtil {
  public:
   // Set every field in the message to a unique value.
   static void SetAllFields(unittest::TestAllTypes* message);
+  static void SetOptionalFields(unittest::TestAllTypes* message);
+  static void AddRepeatedFields1(unittest::TestAllTypes* message);
+  static void AddRepeatedFields2(unittest::TestAllTypes* message);
+  static void SetDefaultFields(unittest::TestAllTypes* message);
   static void SetAllExtensions(unittest::TestAllExtensions* message);
   static void SetAllFieldsAndExtensions(unittest::TestFieldOrderings* message);
   static void SetPackedFields(unittest::TestPackedTypes* message);
@@ -96,12 +101,16 @@ class TestUtil {
   // Check that the passed-in serialization is the canonical serialization we
   // expect for a TestFieldOrderings message filled in by
   // SetAllFieldsAndExtensions().
-  static void ExpectAllFieldsAndExtensionsInOrder(const std::string& serialized);
+  static void ExpectAllFieldsAndExtensionsInOrder(const string& serialized);
 
   // Check that all repeated fields have had their last elements removed.
   static void ExpectLastRepeatedsRemoved(
       const unittest::TestAllTypes& message);
   static void ExpectLastRepeatedExtensionsRemoved(
+      const unittest::TestAllExtensions& message);
+  static void ExpectLastRepeatedsReleased(
+      const unittest::TestAllTypes& message);
+  static void ExpectLastRepeatedExtensionsReleased(
       const unittest::TestAllExtensions& message);
 
   // Check that all repeated fields have had their first and last elements
@@ -131,10 +140,20 @@ class TestUtil {
     void ExpectPackedClearViaReflection(const Message& message);
 
     void RemoveLastRepeatedsViaReflection(Message* message);
+    void ReleaseLastRepeatedsViaReflection(
+        Message* message, bool expect_extensions_notnull);
     void SwapRepeatedsViaReflection(Message* message);
 
+    enum MessageReleaseState {
+      IS_NULL,
+      CAN_BE_NULL,
+      NOT_NULL,
+    };
+    void ExpectMessagesReleasedViaReflection(
+        Message* message, MessageReleaseState expected_release_state);
+
    private:
-    const FieldDescriptor* F(const std::string& name);
+    const FieldDescriptor* F(const string& name);
 
     const Descriptor* base_descriptor_;
 
@@ -143,6 +162,7 @@ class TestUtil {
     const FieldDescriptor* nested_b_;
     const FieldDescriptor* foreign_c_;
     const FieldDescriptor* import_d_;
+    const FieldDescriptor* import_e_;
 
     const EnumValueDescriptor* nested_foo_;
     const EnumValueDescriptor* nested_bar_;

@@ -61,17 +61,18 @@ class EnumFieldGenerator : public FieldGenerator {
   void GenerateMergingCode(io::Printer* printer) const;
   void GenerateBuildingCode(io::Printer* printer) const;
   void GenerateParsingCode(io::Printer* printer) const;
+  void GenerateParsingDoneCode(io::Printer* printer) const;
   void GenerateSerializationCode(io::Printer* printer) const;
   void GenerateSerializedSizeCode(io::Printer* printer) const;
   void GenerateFieldBuilderInitializationCode(io::Printer* printer) const;
   void GenerateEqualsCode(io::Printer* printer) const;
   void GenerateHashCode(io::Printer* printer) const;
 
-  std::string GetBoxedType() const;
+  string GetBoxedType() const;
 
  private:
   const FieldDescriptor* descriptor_;
-  std::map<std::string, std::string> variables_;
+  map<string, string> variables_;
   const int messageBitIndex_;
   const int builderBitIndex_;
 
@@ -96,17 +97,18 @@ class RepeatedEnumFieldGenerator : public FieldGenerator {
   void GenerateBuildingCode(io::Printer* printer) const;
   void GenerateParsingCode(io::Printer* printer) const;
   void GenerateParsingCodeFromPacked(io::Printer* printer) const;
+  void GenerateParsingDoneCode(io::Printer* printer) const;
   void GenerateSerializationCode(io::Printer* printer) const;
   void GenerateSerializedSizeCode(io::Printer* printer) const;
   void GenerateFieldBuilderInitializationCode(io::Printer* printer) const;
   void GenerateEqualsCode(io::Printer* printer) const;
   void GenerateHashCode(io::Printer* printer) const;
 
-  std::string GetBoxedType() const;
+  string GetBoxedType() const;
 
  private:
   const FieldDescriptor* descriptor_;
-  std::map<std::string, std::string> variables_;
+  map<string, string> variables_;
   const int messageBitIndex_;
   const int builderBitIndex_;
 

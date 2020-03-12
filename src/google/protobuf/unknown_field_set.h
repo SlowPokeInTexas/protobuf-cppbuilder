@@ -38,12 +38,24 @@
 #ifndef GOOGLE_PROTOBUF_UNKNOWN_FIELD_SET_H__
 #define GOOGLE_PROTOBUF_UNKNOWN_FIELD_SET_H__
 
+#include <assert.h>
 #include <string>
 #include <vector>
-#include <google/protobuf/repeated_field.h>
+#include <google/protobuf/stubs/common.h>
+// TODO(jasonh): some people seem to rely on protobufs to include this for them!
 
 namespace google {
 namespace protobuf {
+  namespace io {
+    class CodedInputStream;         // coded_stream.h
+    class CodedOutputStream;        // coded_stream.h
+    class ZeroCopyInputStream;      // zero_copy_stream.h
+  }
+  namespace internal {
+    class WireFormat;               // wire_format.h
+    class UnknownFieldSetFieldSkipperUsingCord;
+                                    // extension_set_heavy.cc
+  }
 
 class Message;                      // message.h
 class UnknownField;                 // below
@@ -67,6 +79,9 @@ class LIBPROTOBUF_EXPORT UnknownFieldSet {
 
   // Remove all fields.
   inline void Clear();
+
+  // Remove all fields and deallocate internal data objects
+  void ClearAndFreeMemory();
 
   // Is this set empty?
   inline bool empty() const;
@@ -100,12 +115,21 @@ class LIBPROTOBUF_EXPORT UnknownFieldSet {
   void AddVarint(int number, uint64 value);
   void AddFixed32(int number, uint32 value);
   void AddFixed64(int number, uint64 value);
-  void AddLengthDelimited(int number, const std::string& value);
-  std::string* AddLengthDelimited(int number);
+  void AddLengthDelimited(int number, const string& value);
+  string* AddLengthDelimited(int number);
   UnknownFieldSet* AddGroup(int number);
 
   // Adds an unknown field from another set.
   void AddField(const UnknownField& field);
+
+  // Delete fields with indices in the range [start .. start+num-1].
+  // Caution: implementation moves all fields with indices [start+num .. ].
+  void DeleteSubrange(int start, int num);
+
+  // Delete all fields with a specific field number. The order of left fields
+  // is preserved.
+  // Caution: implementation moves all fields after the first deleted field.
+  void DeleteByNumber(int number);
 
   // Parsing helpers -------------------------------------------------
   // These work exactly like the similarly-named methods of Message.
@@ -114,14 +138,15 @@ class LIBPROTOBUF_EXPORT UnknownFieldSet {
   bool ParseFromCodedStream(io::CodedInputStream* input);
   bool ParseFromZeroCopyStream(io::ZeroCopyInputStream* input);
   bool ParseFromArray(const void* data, int size);
-  inline bool ParseFromString(const std::string& data) {
+  inline bool ParseFromString(const string& data) {
     return ParseFromArray(data.data(), data.size());
   }
 
  private:
+
   void ClearFallback();
 
-  std::vector<UnknownField>* fields_;
+  vector<UnknownField>* fields_;
 
   GOOGLE_DISALLOW_EVIL_CONSTRUCTORS(UnknownFieldSet);
 };
@@ -149,15 +174,24 @@ class LIBPROTOBUF_EXPORT UnknownField {
   inline uint64 varint() const;
   inline uint32 fixed32() const;
   inline uint64 fixed64() const;
-  inline const std::string& length_delimited() const;
+  inline const string& length_delimited() const;
   inline const UnknownFieldSet& group() const;
 
   inline void set_varint(uint64 value);
   inline void set_fixed32(uint32 value);
   inline void set_fixed64(uint64 value);
-  inline void set_length_delimited(const std::string& value);
-  inline std::string* mutable_length_delimited();
+  inline void set_length_delimited(const string& value);
+  inline string* mutable_length_delimited();
   inline UnknownFieldSet* mutable_group();
+
+  // Serialization API.
+  // These methods can take advantage of the underlying implementation and may
+  // archieve a better performance than using getters to retrieve the data and
+  // do the serialization yourself.
+  void SerializeLengthDelimitedNoTag(io::CodedOutputStream* output) const;
+  uint8* SerializeLengthDelimitedNoTagToArray(uint8* target) const;
+
+  inline int GetLengthDelimitedSize() const;
 
  private:
   friend class UnknownFieldSet;
@@ -168,13 +202,16 @@ class LIBPROTOBUF_EXPORT UnknownField {
   // Make a deep copy of any pointers in this UnknownField.
   void DeepCopy();
 
+
   unsigned int number_ : 29;
   unsigned int type_   : 3;
   union {
     uint64 varint_;
     uint32 fixed32_;
     uint64 fixed64_;
-    std::string* length_delimited_;
+    mutable union {
+      string* string_value_;
+    } length_delimited_;
     UnknownFieldSet* group_;
   };
 };
@@ -207,9 +244,10 @@ inline UnknownField* UnknownFieldSet::mutable_field(int index) {
 }
 
 inline void UnknownFieldSet::AddLengthDelimited(
-    int number, const std::string& value) {
+    int number, const string& value) {
   AddLengthDelimited(number)->assign(value);
 }
+
 
 inline int UnknownField::number() const { return number_; }
 inline UnknownField::Type UnknownField::type() const {
@@ -217,49 +255,54 @@ inline UnknownField::Type UnknownField::type() const {
 }
 
 inline uint64 UnknownField::varint () const {
-  GOOGLE_DCHECK_EQ(type_, TYPE_VARINT);
+  assert(type_ == TYPE_VARINT);
   return varint_;
 }
 inline uint32 UnknownField::fixed32() const {
-  GOOGLE_DCHECK_EQ(type_, TYPE_FIXED32);
+  assert(type_ == TYPE_FIXED32);
   return fixed32_;
 }
 inline uint64 UnknownField::fixed64() const {
-  GOOGLE_DCHECK_EQ(type_, TYPE_FIXED64);
+  assert(type_ == TYPE_FIXED64);
   return fixed64_;
 }
-inline const std::string& UnknownField::length_delimited() const {
-  GOOGLE_DCHECK_EQ(type_, TYPE_LENGTH_DELIMITED);
-  return *length_delimited_;
+inline const string& UnknownField::length_delimited() const {
+  assert(type_ == TYPE_LENGTH_DELIMITED);
+  return *length_delimited_.string_value_;
 }
 inline const UnknownFieldSet& UnknownField::group() const {
-  GOOGLE_DCHECK_EQ(type_, TYPE_GROUP);
+  assert(type_ == TYPE_GROUP);
   return *group_;
 }
 
 inline void UnknownField::set_varint(uint64 value) {
-  GOOGLE_DCHECK_EQ(type_, TYPE_VARINT);
+  assert(type_ == TYPE_VARINT);
   varint_ = value;
 }
 inline void UnknownField::set_fixed32(uint32 value) {
-  GOOGLE_DCHECK_EQ(type_, TYPE_FIXED32);
+  assert(type_ == TYPE_FIXED32);
   fixed32_ = value;
 }
 inline void UnknownField::set_fixed64(uint64 value) {
-  GOOGLE_DCHECK_EQ(type_, TYPE_FIXED64);
+  assert(type_ == TYPE_FIXED64);
   fixed64_ = value;
 }
-inline void UnknownField::set_length_delimited(const std::string& value) {
-  GOOGLE_DCHECK_EQ(type_, TYPE_LENGTH_DELIMITED);
-  length_delimited_->assign(value);
+inline void UnknownField::set_length_delimited(const string& value) {
+  assert(type_ == TYPE_LENGTH_DELIMITED);
+  length_delimited_.string_value_->assign(value);
 }
-inline std::string* UnknownField::mutable_length_delimited() {
-  GOOGLE_DCHECK_EQ(type_, TYPE_LENGTH_DELIMITED);
-  return length_delimited_;
+inline string* UnknownField::mutable_length_delimited() {
+  assert(type_ == TYPE_LENGTH_DELIMITED);
+  return length_delimited_.string_value_;
 }
 inline UnknownFieldSet* UnknownField::mutable_group() {
-  GOOGLE_DCHECK_EQ(type_, TYPE_GROUP);
+  assert(type_ == TYPE_GROUP);
   return group_;
+}
+
+inline int UnknownField::GetLengthDelimitedSize() const {
+  GOOGLE_DCHECK_EQ(TYPE_LENGTH_DELIMITED, type_);
+  return length_delimited_.string_value_->size();
 }
 
 }  // namespace protobuf

@@ -38,7 +38,10 @@
 #ifndef GOOGLE_PROTOBUF_TEXT_FORMAT_H__
 #define GOOGLE_PROTOBUF_TEXT_FORMAT_H__
 
+#include <map>
 #include <string>
+#include <vector>
+#include <google/protobuf/stubs/common.h>
 #include <google/protobuf/message.h>
 #include <google/protobuf/descriptor.h>
 
@@ -67,11 +70,11 @@ class LIBPROTOBUF_EXPORT TextFormat {
                                  io::ZeroCopyOutputStream* output);
 
   // Like Print(), but outputs directly to a string.
-  static bool PrintToString(const Message& message, std::string* output);
+  static bool PrintToString(const Message& message, string* output);
 
   // Like PrintUnknownFields(), but outputs directly to a string.
   static bool PrintUnknownFieldsToString(const UnknownFieldSet& unknown_fields,
-                                         std::string* output);
+                                         string* output);
 
   // Outputs a textual representation of the value of the field supplied on
   // the message supplied. For non-repeated fields, an index of -1 must
@@ -80,7 +83,7 @@ class LIBPROTOBUF_EXPORT TextFormat {
   static void PrintFieldValueToString(const Message& message,
                                       const FieldDescriptor* field,
                                       int index,
-                                      std::string* output);
+                                      string* output);
 
   // Class for those users which require more fine-grained control over how
   // a protobuffer message is printed out.
@@ -95,15 +98,15 @@ class LIBPROTOBUF_EXPORT TextFormat {
     bool PrintUnknownFields(const UnknownFieldSet& unknown_fields,
                             io::ZeroCopyOutputStream* output) const;
     // Like TextFormat::PrintToString
-    bool PrintToString(const Message& message, std::string* output) const;
+    bool PrintToString(const Message& message, string* output) const;
     // Like TextFormat::PrintUnknownFieldsToString
     bool PrintUnknownFieldsToString(const UnknownFieldSet& unknown_fields,
-                                    std::string* output) const;
+                                    string* output) const;
     // Like TextFormat::PrintFieldValueToString
     void PrintFieldValueToString(const Message& message,
                                  const FieldDescriptor* field,
                                  int index,
-                                 std::string* output) const;
+                                 string* output) const;
 
     // Adjust the initial indent level of all output.  Each indent level is
     // equal to two spaces.
@@ -191,18 +194,18 @@ class LIBPROTOBUF_EXPORT TextFormat {
   // by Print().
   static bool Parse(io::ZeroCopyInputStream* input, Message* output);
   // Like Parse(), but reads directly from a string.
-  static bool ParseFromString(const std::string& input, Message* output);
+  static bool ParseFromString(const string& input, Message* output);
 
   // Like Parse(), but the data is merged into the given message, as if
   // using Message::MergeFrom().
   static bool Merge(io::ZeroCopyInputStream* input, Message* output);
   // Like Merge(), but reads directly from a string.
-  static bool MergeFromString(const std::string& input, Message* output);
+  static bool MergeFromString(const string& input, Message* output);
 
   // Parse the given text as a single field value and store it into the
   // given field of the given message. If the field is a repeated field,
   // the new value will be added to the end
-  static bool ParseFieldValueFromString(const std::string& input,
+  static bool ParseFieldValueFromString(const string& input,
                                         const FieldDescriptor* field,
                                         Message* message);
 
@@ -217,7 +220,58 @@ class LIBPROTOBUF_EXPORT TextFormat {
     // name.  Returns NULL if no extension is known for this name or number.
     virtual const FieldDescriptor* FindExtension(
         Message* message,
-        const std::string& name) const = 0;
+        const string& name) const = 0;
+  };
+
+  // A location in the parsed text.
+  struct ParseLocation {
+    int line;
+    int column;
+
+    ParseLocation() : line(-1), column(-1) {}
+    ParseLocation(int line_param, int column_param)
+        : line(line_param), column(column_param) {}
+  };
+
+  // Data structure which is populated with the locations of each field
+  // value parsed from the text.
+  class LIBPROTOBUF_EXPORT ParseInfoTree {
+   public:
+    ParseInfoTree();
+    ~ParseInfoTree();
+
+    // Returns the parse location for index-th value of the field in the parsed
+    // text. If none exists, returns a location with line = -1. Index should be
+    // -1 for not-repeated fields.
+    ParseLocation GetLocation(const FieldDescriptor* field, int index) const;
+
+    // Returns the parse info tree for the given field, which must be a message
+    // type. The nested information tree is owned by the root tree and will be
+    // deleted when it is deleted.
+    ParseInfoTree* GetTreeForNested(const FieldDescriptor* field,
+                                    int index) const;
+
+   private:
+    // Allow the text format parser to record information into the tree.
+    friend class TextFormat;
+
+    // Records the starting location of a single value for a field.
+    void RecordLocation(const FieldDescriptor* field, ParseLocation location);
+
+    // Create and records a nested tree for a nested message field.
+    ParseInfoTree* CreateNested(const FieldDescriptor* field);
+
+    // Defines the map from the index-th field descriptor to its parse location.
+    typedef map<const FieldDescriptor*, vector<ParseLocation> > LocationMap;
+
+    // Defines the map from the index-th field descriptor to the nested parse
+    // info tree.
+    typedef map<const FieldDescriptor*, vector<ParseInfoTree*> > NestedMap;
+
+    LocationMap locations_;
+    NestedMap nested_;
+
+    GOOGLE_DISALLOW_EVIL_CONSTRUCTORS(ParseInfoTree);
   };
 
   // For more control over parsing, use this class.
@@ -229,11 +283,11 @@ class LIBPROTOBUF_EXPORT TextFormat {
     // Like TextFormat::Parse().
     bool Parse(io::ZeroCopyInputStream* input, Message* output);
     // Like TextFormat::ParseFromString().
-    bool ParseFromString(const std::string& input, Message* output);
+    bool ParseFromString(const string& input, Message* output);
     // Like TextFormat::Merge().
     bool Merge(io::ZeroCopyInputStream* input, Message* output);
     // Like TextFormat::MergeFromString().
-    bool MergeFromString(const std::string& input, Message* output);
+    bool MergeFromString(const string& input, Message* output);
 
     // Set where to report parse errors.  If NULL (the default), errors will
     // be printed to stderr.
@@ -248,6 +302,12 @@ class LIBPROTOBUF_EXPORT TextFormat {
       finder_ = finder;
     }
 
+    // Sets where location information about the parse will be written. If NULL
+    // (the default), then no location will be written.
+    void WriteLocationsTo(ParseInfoTree* tree) {
+      parse_info_tree_ = tree;
+    }
+
     // Normally parsing fails if, after parsing, output->IsInitialized()
     // returns false.  Call AllowPartialMessage(true) to skip this check.
     void AllowPartialMessage(bool allow) {
@@ -255,9 +315,10 @@ class LIBPROTOBUF_EXPORT TextFormat {
     }
 
     // Like TextFormat::ParseFieldValueFromString
-    bool ParseFieldValueFromString(const std::string& input,
+    bool ParseFieldValueFromString(const string& input,
                                    const FieldDescriptor* field,
                                    Message* output);
+
 
    private:
     // Forward declaration of an internal class used to parse text
@@ -272,12 +333,35 @@ class LIBPROTOBUF_EXPORT TextFormat {
 
     io::ErrorCollector* error_collector_;
     Finder* finder_;
+    ParseInfoTree* parse_info_tree_;
     bool allow_partial_;
+    bool allow_unknown_field_;
   };
 
  private:
+  // Hack: ParseInfoTree declares TextFormat as a friend which should extend
+  // the friendship to TextFormat::Parser::ParserImpl, but unfortunately some
+  // old compilers (e.g. GCC 3.4.6) don't implement this correctly. We provide
+  // helpers for ParserImpl to call methods of ParseInfoTree.
+  static inline void RecordLocation(ParseInfoTree* info_tree,
+                                    const FieldDescriptor* field,
+                                    ParseLocation location);
+  static inline ParseInfoTree* CreateNested(ParseInfoTree* info_tree,
+                                            const FieldDescriptor* field);
+
   GOOGLE_DISALLOW_EVIL_CONSTRUCTORS(TextFormat);
 };
+
+inline void TextFormat::RecordLocation(ParseInfoTree* info_tree,
+                                       const FieldDescriptor* field,
+                                       ParseLocation location) {
+  info_tree->RecordLocation(field, location);
+}
+
+inline TextFormat::ParseInfoTree* TextFormat::CreateNested(
+    ParseInfoTree* info_tree, const FieldDescriptor* field) {
+  return info_tree->CreateNested(field);
+}
 
 }  // namespace protobuf
 

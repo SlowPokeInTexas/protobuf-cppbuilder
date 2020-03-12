@@ -44,6 +44,10 @@
 // correctly and produces the interfaces we expect, which is why this test
 // is written this way.
 
+#include <google/protobuf/compiler/cpp/cpp_unittest.h>
+
+#include <vector>
+
 #include <google/protobuf/unittest.pb.h>
 #include <google/protobuf/unittest_optimize_for.pb.h>
 #include <google/protobuf/unittest_embed_optimize_for.pb.h>
@@ -62,7 +66,7 @@
 #include <google/protobuf/stubs/substitute.h>
 #include <google/protobuf/testing/googletest.h>
 #include <gtest/gtest.h>
-#include <google/protobuf/stubs/stl_util-inl.h>
+#include <google/protobuf/stubs/stl_util.h>
 
 namespace google {
 namespace protobuf {
@@ -72,17 +76,19 @@ namespace cpp {
 // Can't use an anonymous namespace here due to brokenness of Tru64 compiler.
 namespace cpp_unittest {
 
+namespace protobuf_unittest = ::protobuf_unittest;
+
 
 class MockErrorCollector : public MultiFileErrorCollector {
  public:
   MockErrorCollector() {}
   ~MockErrorCollector() {}
 
-  std::string text_;
+  string text_;
 
   // implements ErrorCollector ---------------------------------------
-  void AddError(const std::string& filename, int line, int column,
-                const std::string& message) {
+  void AddError(const string& filename, int line, int column,
+                const string& message) {
     strings::SubstituteAndAppend(&text_, "$0:$1:$2: $3\n",
                                  filename, line, column, message);
   }
@@ -153,14 +159,14 @@ TEST(GeneratedMessageTest, FloatingPointDefaults) {
   EXPECT_EQ(-1.5f, extreme_default.negative_float());
   EXPECT_EQ(2.0e8f, extreme_default.large_float());
   EXPECT_EQ(-8e-28f, extreme_default.small_negative_float());
-  EXPECT_EQ(std::numeric_limits<double>::infinity(),
+  EXPECT_EQ(numeric_limits<double>::infinity(),
             extreme_default.inf_double());
-  EXPECT_EQ(-std::numeric_limits<double>::infinity(),
+  EXPECT_EQ(-numeric_limits<double>::infinity(),
             extreme_default.neg_inf_double());
   EXPECT_TRUE(extreme_default.nan_double() != extreme_default.nan_double());
-  EXPECT_EQ(std::numeric_limits<float>::infinity(),
+  EXPECT_EQ(numeric_limits<float>::infinity(),
             extreme_default.inf_float());
-  EXPECT_EQ(-std::numeric_limits<float>::infinity(),
+  EXPECT_EQ(-numeric_limits<float>::infinity(),
             extreme_default.neg_inf_float());
   EXPECT_TRUE(extreme_default.nan_float() != extreme_default.nan_float());
 }
@@ -170,6 +176,15 @@ TEST(GeneratedMessageTest, Trigraph) {
       unittest::TestExtremeDefaultValues::default_instance();
 
   EXPECT_EQ("? ? ?? ?? ??? ?\?/ ?\?-", extreme_default.cpp_trigraph());
+}
+
+TEST(GeneratedMessageTest, ExtremeSmallIntegerDefault) {
+  const unittest::TestExtremeDefaultValues& extreme_default =
+      unittest::TestExtremeDefaultValues::default_instance();
+  EXPECT_EQ(-0x80000000, kint32min);
+  EXPECT_EQ(GOOGLE_LONGLONG(-0x8000000000000000), kint64min);
+  EXPECT_EQ(kint32min, extreme_default.really_small_int32());
+  EXPECT_EQ(kint64min, extreme_default.really_small_int64());
 }
 
 TEST(GeneratedMessageTest, Accessors) {
@@ -200,6 +215,13 @@ TEST(GeneratedMessageTest, MutableStringDefault) {
   EXPECT_EQ("hello", *message.mutable_default_string());
 }
 
+TEST(GeneratedMessageTest, StringDefaults) {
+  unittest::TestExtremeDefaultValues message;
+  // Check if '\000' can be used in default string value.
+  EXPECT_EQ(string("hel\000lo", 6), message.string_with_zero());
+  EXPECT_EQ(string("wor\000ld", 6), message.bytes_with_zero());
+}
+
 TEST(GeneratedMessageTest, ReleaseString) {
   // Check that release_foo() starts out NULL, and gives us a value
   // that we can delete after it's been set.
@@ -211,7 +233,7 @@ TEST(GeneratedMessageTest, ReleaseString) {
 
   message.set_default_string("blah");
   EXPECT_TRUE(message.has_default_string());
-  std::string* str = message.release_default_string();
+  string* str = message.release_default_string();
   EXPECT_FALSE(message.has_default_string());
   ASSERT_TRUE(str != NULL);
   EXPECT_EQ("blah", *str);
@@ -240,6 +262,49 @@ TEST(GeneratedMessageTest, ReleaseMessage) {
 
   EXPECT_EQ(NULL, message.release_optional_nested_message());
   EXPECT_FALSE(message.has_optional_nested_message());
+}
+
+TEST(GeneratedMessageTest, SetAllocatedString) {
+  // Check that set_allocated_foo() works for strings.
+  unittest::TestAllTypes message;
+
+  EXPECT_FALSE(message.has_optional_string());
+  const string kHello("hello");
+  message.set_optional_string(kHello);
+  EXPECT_TRUE(message.has_optional_string());
+
+  message.set_allocated_optional_string(NULL);
+  EXPECT_FALSE(message.has_optional_string());
+  EXPECT_EQ("", message.optional_string());
+
+  message.set_allocated_optional_string(new string(kHello));
+  EXPECT_TRUE(message.has_optional_string());
+  EXPECT_EQ(kHello, message.optional_string());
+}
+
+TEST(GeneratedMessageTest, SetAllocatedMessage) {
+  // Check that set_allocated_foo() can be called in all cases.
+  unittest::TestAllTypes message;
+
+  EXPECT_FALSE(message.has_optional_nested_message());
+
+  message.mutable_optional_nested_message()->set_bb(1);
+  EXPECT_TRUE(message.has_optional_nested_message());
+
+  message.set_allocated_optional_nested_message(NULL);
+  EXPECT_FALSE(message.has_optional_nested_message());
+  EXPECT_EQ(&unittest::TestAllTypes::NestedMessage::default_instance(),
+            &message.optional_nested_message());
+
+  message.mutable_optional_nested_message()->set_bb(1);
+  unittest::TestAllTypes::NestedMessage* nest =
+      message.release_optional_nested_message();
+  ASSERT_TRUE(nest != NULL);
+  EXPECT_FALSE(message.has_optional_nested_message());
+
+  message.set_allocated_optional_nested_message(nest);
+  EXPECT_TRUE(message.has_optional_nested_message());
+  EXPECT_EQ(1, message.optional_nested_message().bb());
 }
 
 TEST(GeneratedMessageTest, Clear) {
@@ -316,7 +381,6 @@ TEST(GeneratedMessageTest, StringCharStarLength) {
   EXPECT_EQ("wx", message.repeated_string(0));
 }
 
-
 TEST(GeneratedMessageTest, CopyFrom) {
   unittest::TestAllTypes message1, message2;
 
@@ -328,7 +392,6 @@ TEST(GeneratedMessageTest, CopyFrom) {
   message2.CopyFrom(message2);
   TestUtil::ExpectAllFieldsSet(message2);
 }
-
 
 TEST(GeneratedMessageTest, SwapWithEmpty) {
   unittest::TestAllTypes message1, message2;
@@ -428,6 +491,8 @@ TEST(GeneratedMessageTest, CopyAssignmentOperator) {
   TestUtil::ExpectAllFieldsSet(message2);
 }
 
+#if !defined(PROTOBUF_TEST_NO_DESCRIPTORS) || \
+    !defined(GOOGLE_PROTOBUF_NO_RTTI)
 TEST(GeneratedMessageTest, UpcastCopyFrom) {
   // Test the CopyFrom method that takes in the generic const Message&
   // parameter.
@@ -440,6 +505,7 @@ TEST(GeneratedMessageTest, UpcastCopyFrom) {
 
   TestUtil::ExpectAllFieldsSet(message2);
 }
+#endif
 
 #ifndef PROTOBUF_TEST_NO_DESCRIPTORS
 
@@ -491,7 +557,9 @@ TEST(GeneratedMessageTest, NonEmptyMergeFrom) {
   TestUtil::ExpectAllFieldsSet(message1);
 }
 
-#ifdef GTEST_HAS_DEATH_TEST
+#if !defined(PROTOBUF_TEST_NO_DESCRIPTORS) || \
+    !defined(GOOGLE_PROTOBUF_NO_RTTI)
+#ifdef PROTOBUF_HAS_DEATH_TEST
 
 TEST(GeneratedMessageTest, MergeFromSelf) {
   unittest::TestAllTypes message;
@@ -500,16 +568,17 @@ TEST(GeneratedMessageTest, MergeFromSelf) {
                "&from");
 }
 
-#endif  // GTEST_HAS_DEATH_TEST
+#endif  // PROTOBUF_HAS_DEATH_TEST
+#endif  // !PROTOBUF_TEST_NO_DESCRIPTORS || !GOOGLE_PROTOBUF_NO_RTTI
 
 // Test the generated SerializeWithCachedSizesToArray(),
 TEST(GeneratedMessageTest, SerializationToArray) {
   unittest::TestAllTypes message1, message2;
-  std::string data;
+  string data;
   TestUtil::SetAllFields(&message1);
   int size = message1.ByteSize();
   data.resize(size);
-  uint8* start = reinterpret_cast<uint8*>(protobuf::string_as_array(&data));
+  uint8* start = reinterpret_cast<uint8*>(string_as_array(&data));
   uint8* end = message1.SerializeWithCachedSizesToArray(start);
   EXPECT_EQ(size, end - start);
   EXPECT_TRUE(message2.ParseFromString(data));
@@ -519,11 +588,11 @@ TEST(GeneratedMessageTest, SerializationToArray) {
 
 TEST(GeneratedMessageTest, PackedFieldsSerializationToArray) {
   unittest::TestPackedTypes packed_message1, packed_message2;
-  std::string packed_data;
+  string packed_data;
   TestUtil::SetPackedFields(&packed_message1);
   int packed_size = packed_message1.ByteSize();
   packed_data.resize(packed_size);
-  uint8* start = reinterpret_cast<uint8*>(protobuf::string_as_array(&packed_data));
+  uint8* start = reinterpret_cast<uint8*>(string_as_array(&packed_data));
   uint8* end = packed_message1.SerializeWithCachedSizesToArray(start);
   EXPECT_EQ(packed_size, end - start);
   EXPECT_TRUE(packed_message2.ParseFromString(packed_data));
@@ -536,11 +605,11 @@ TEST(GeneratedMessageTest, SerializationToStream) {
   unittest::TestAllTypes message1, message2;
   TestUtil::SetAllFields(&message1);
   int size = message1.ByteSize();
-  std::string data;
+  string data;
   data.resize(size);
   {
     // Allow the output stream to buffer only one byte at a time.
-    io::ArrayOutputStream array_stream(protobuf::string_as_array(&data), size, 1);
+    io::ArrayOutputStream array_stream(string_as_array(&data), size, 1);
     io::CodedOutputStream output_stream(&array_stream);
     message1.SerializeWithCachedSizes(&output_stream);
     EXPECT_FALSE(output_stream.HadError());
@@ -555,11 +624,11 @@ TEST(GeneratedMessageTest, PackedFieldsSerializationToStream) {
   unittest::TestPackedTypes message1, message2;
   TestUtil::SetPackedFields(&message1);
   int size = message1.ByteSize();
-  std::string data;
+  string data;
   data.resize(size);
   {
     // Allow the output stream to buffer only one byte at a time.
-    io::ArrayOutputStream array_stream(protobuf::string_as_array(&data), size, 1);
+    io::ArrayOutputStream array_stream(string_as_array(&data), size, 1);
     io::CodedOutputStream output_stream(&array_stream);
     message1.SerializeWithCachedSizes(&output_stream);
     EXPECT_FALSE(output_stream.HadError());
@@ -622,7 +691,7 @@ TEST(GeneratedMessageTest, ForeignNested) {
 TEST(GeneratedMessageTest, ReallyLargeTagNumber) {
   // Test that really large tag numbers don't break anything.
   unittest::TestReallyLargeTagNumber message1, message2;
-  std::string data;
+  string data;
 
   // For the most part, if this compiles and runs then we're probably good.
   // (The most likely cause for failure would be if something were attempting
@@ -693,6 +762,13 @@ TEST(GeneratedMessageTest, TestConflictingSymbolNames) {
 
   message.set_friend_(5);
   EXPECT_EQ(5, message.friend_());
+
+  // Instantiate extension template functions to test conflicting template
+  // parameter names.
+  typedef protobuf_unittest::TestConflictingSymbolNamesExtension ExtensionMessage;
+  message.AddExtension(ExtensionMessage::repeated_int32_ext, 123);
+  EXPECT_EQ(123,
+            message.GetExtension(ExtensionMessage::repeated_int32_ext, 0));
 }
 
 #ifndef PROTOBUF_TEST_NO_DESCRIPTORS
@@ -718,7 +794,7 @@ TEST(GeneratedMessageTest, TestEmbedOptimizedForSize) {
   protobuf_unittest::TestEmbedOptimizedForSize message, message2;
   message.mutable_optional_message()->set_i(1);
   message.add_repeated_message()->mutable_msg()->set_c(2);
-  std::string data;
+  string data;
   message.SerializeToString(&data);
   ASSERT_TRUE(message2.ParseFromString(data));
   EXPECT_EQ(1, message2.optional_message().i());
@@ -738,17 +814,17 @@ TEST(GeneratedMessageTest, TestSpaceUsed) {
   message1.set_optional_uint64(12345);
   EXPECT_EQ(empty_message_size, message1.SpaceUsed());
 
-  // On some STL implementations, setting the std::string to a small value should
-  // only increase SpaceUsed() by the size of a std::string object, though this is
+  // On some STL implementations, setting the string to a small value should
+  // only increase SpaceUsed() by the size of a string object, though this is
   // not true everywhere.
   message1.set_optional_string("abc");
-  EXPECT_LE(empty_message_size + sizeof(std::string), message1.SpaceUsed());
+  EXPECT_LE(empty_message_size + sizeof(string), message1.SpaceUsed());
 
   // Setting a string to a value larger than the string object itself should
   // increase SpaceUsed(), because it cannot store the value internally.
-  message1.set_optional_string(std::string(sizeof(std::string) + 1, 'x'));
+  message1.set_optional_string(string(sizeof(string) + 1, 'x'));
   int min_expected_increase = message1.optional_string().capacity() +
-      sizeof(std::string);
+      sizeof(string);
   EXPECT_LE(empty_message_size + min_expected_increase,
             message1.SpaceUsed());
 
@@ -867,11 +943,10 @@ TEST(GeneratedEnumTest, MinAndMax) {
   EXPECT_NE(null_pointer, &unittest::ForeignEnum_MAX);
   EXPECT_NE(null_pointer, &unittest::ForeignEnum_ARRAYSIZE);
 
-  // Make sure we can use _MIN, _MAX and _ARRAYSIZE as switch cases.
+  // Make sure we can use _MIN and _MAX as switch cases.
   switch (unittest::SPARSE_A) {
     case unittest::TestSparseEnum_MIN:
     case unittest::TestSparseEnum_MAX:
-    case unittest::TestSparseEnum_ARRAYSIZE:
       break;
     default:
       break;
@@ -968,7 +1043,7 @@ class GeneratedServiceTest : public testing::Test {
     // ---------------------------------------------------------------
 
     bool called_;
-    std::string method_;
+    string method_;
     RpcController* controller_;
     const Message* request_;
     Message* response_;
@@ -1028,14 +1103,14 @@ class GeneratedServiceTest : public testing::Test {
       ADD_FAILURE() << "Failed() not expected during this test.";
       return false;
     }
-    std::string ErrorText() const {
+    string ErrorText() const {
       ADD_FAILURE() << "ErrorText() not expected during this test.";
       return "";
     }
     void StartCancel() {
       ADD_FAILURE() << "StartCancel() not expected during this test.";
     }
-    void SetFailed(const std::string& reason) {
+    void SetFailed(const string& reason) {
       ADD_FAILURE() << "SetFailed() not expected during this test.";
     }
     bool IsCanceled() const {
@@ -1128,7 +1203,7 @@ TEST_F(GeneratedServiceTest, CallMethod) {
 TEST_F(GeneratedServiceTest, CallMethodTypeFailure) {
   // Verify death if we call Foo() with Bar's message types.
 
-#ifdef GTEST_HAS_DEATH_TEST  // death tests do not work on Windows yet
+#ifdef PROTOBUF_HAS_DEATH_TEST  // death tests do not work on Windows yet
   EXPECT_DEBUG_DEATH(
     mock_service_.CallMethod(foo_, &mock_controller_,
                              &foo_request_, &bar_response_, done_.get()),
@@ -1139,7 +1214,7 @@ TEST_F(GeneratedServiceTest, CallMethodTypeFailure) {
     mock_service_.CallMethod(foo_, &mock_controller_,
                              &bar_request_, &foo_response_, done_.get()),
     "dynamic_cast");
-#endif  // GTEST_HAS_DEATH_TEST
+#endif  // PROTOBUF_HAS_DEATH_TEST
 }
 
 TEST_F(GeneratedServiceTest, GetPrototypes) {
@@ -1195,7 +1270,7 @@ TEST_F(GeneratedServiceTest, NotImplemented) {
    public:
     ExpectUnimplementedController() : called_(false) {}
 
-    void SetFailed(const std::string& reason) {
+    void SetFailed(const string& reason) {
       EXPECT_FALSE(called_);
       called_ = true;
       EXPECT_EQ("Method Foo() not implemented.", reason);
